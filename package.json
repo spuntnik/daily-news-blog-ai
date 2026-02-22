@@ -1,12 +1,16 @@
 {
   "name": "newsflow-ai-monorepo",
   "private": true,
+  "packageManager": "yarn@1.22.19",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev:web": "pnpm --filter @newsflow/web dev",
-    "dev:api": "pnpm --filter @newsflow/api dev",
-    "build": "turbo build",
+    "dev:web": "turbo run dev --filter=@newsflow/web",
+    "dev:api": "turbo run dev --filter=@newsflow/api",
+    "build": "turbo run build",
     "dev": "turbo run dev --parallel"
   },
-  "devDependencies": {"turbo": "^2.0.0", "typescript": "^5.4.0"}
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
 }
