@@ -1,0 +1,6 @@
+{
+  "name": "@newsflow/api", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {"dev": "tsx watch src/index.ts", "start": "node dist/index.js", "build": "tsc -p tsconfig.json"},
+  "dependencies": {"hono": "^4.3.0"},
+  "devDependencies": {"tsx": "^4.7.0", "typescript": "^5.4.0"}
+}
