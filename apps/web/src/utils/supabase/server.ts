@@ -1,4 +1,3 @@
-
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
@@ -14,9 +13,13 @@ export function supabaseServer() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // Happens in Server Components; middleware will handle cookie refresh.
+          }
         },
       },
     }
