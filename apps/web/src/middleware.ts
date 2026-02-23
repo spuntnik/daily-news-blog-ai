@@ -22,7 +22,11 @@ export async function middleware(req: NextRequest) {
   );
 
   const { data } = await supabase.auth.getUser();
-
+  if (req.nextUrl.pathname.startsWith("/login") && data.user) {
+  const redirectUrl = req.nextUrl.clone();
+  redirectUrl.pathname = "/dashboard";
+  return NextResponse.redirect(redirectUrl);
+}
   const protectedRoutes = [
     "/dashboard",
     "/generator",
