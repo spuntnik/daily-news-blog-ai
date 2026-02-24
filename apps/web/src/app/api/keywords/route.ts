@@ -1,169 +1,101 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
 
-type Payload = {
+export const runtime = "nodejs";
+
+type ReqBody = {
   topic: string;
   audience?: string;
   region?: string;
   language?: string;
 };
 
-function getSupabaseRouteClient() {
-  const cookieStore = cookies();
-
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
-}
-
-// MVP generator (no AI): produces usable SEO/GEO/AEO buckets
-function generateKeywordSet(input: Payload) {
-  const topic = input.topic.trim();
-  const region = (input.region || "").trim();
-  const audience = (input.audience || "").trim();
-
-  const base = [
-    topic,
-    region ? `${topic} ${region}` : null,
-    audience ? `${topic} for ${audience}` : null,
-  ].filter(Boolean) as string[];
-
-  const intents = [
-    { intent: "informational", patterns: ["what is", "how to", "guide", "examples", "checklist"] },
-    { intent: "commercial", patterns: ["best", "top", "review", "comparison", "tools"] },
-    { intent: "transactional", patterns: ["pricing", "cost", "buy", "template", "service"] },
-  ] as const;
-
-  const seo: any[] = [];
-  const geo: any[] = [];
-  const aeo: any[] = [];
-
-  // SEO: classic keyword variations
-  for (const b of base) {
-    seo.push(
-      { keyword: b, bucket: "SEO", intent: "informational", stage: "awareness", difficulty: "med", priority: 3 },
-      { keyword: `best ${b}`, bucket: "SEO", intent: "commercial", stage: "consideration", difficulty: "med", priority: 4 },
-      { keyword: `${b} checklist`, bucket: "SEO", intent: "informational", stage: "awareness", difficulty: "low", priority: 4 },
-      { keyword: `${b} pricing`, bucket: "SEO", intent: "transactional", stage: "decision", difficulty: "med", priority: 5 }
-    );
-  }
-
-  // GEO: “generative engine” style prompts and entity-rich queries
-  for (const b of base) {
-    geo.push(
-      { keyword: `strategies for ${b}`, bucket: "GEO", intent: "informational", stage: "awareness", difficulty: "low", priority: 4 },
-      { keyword: `framework for ${b}`, bucket: "GEO", intent: "informational", stage: "consideration", difficulty: "low", priority: 4 },
-      { keyword: `step-by-step process for ${b}`, bucket: "GEO", intent: "informational", stage: "consideration", difficulty: "low", priority: 4 },
-      { keyword: `common mistakes in ${b}`, bucket: "GEO", intent: "informational", stage: "awareness", difficulty: "low", priority: 3 }
-    );
-  }
-
-  // AEO: answer-engine questions (featured snippet + FAQ style)
-  for (const b of base) {
-    for (const block of intents) {
-      for (const p of block.patterns) {
-        const q =
-          p === "what is" ? `What is ${b}?` :
-          p === "how to" ? `How do we do ${b}?` :
-          p === "guide" ? `${b} guide` :
-          p === "examples" ? `${b} examples` :
-          p === "checklist" ? `${b} checklist` :
-          p === "best" ? `What is the best way to do ${b}?` :
-          p === "top" ? `Top tools for ${b}` :
-          p === "review" ? `${b} review` :
-          p === "comparison" ? `${b} comparison` :
-          p === "tools" ? `Tools for ${b}` :
-          p === "pricing" ? `How much does ${b} cost?` :
-          p === "cost" ? `${b} cost` :
-          p === "buy" ? `Where to buy ${b}?` :
-          p === "template" ? `${b} template` :
-          `Service for ${b}`;
-
-        aeo.push({
-          keyword: q,
-          bucket: "AEO",
-          intent: block.intent,
-          stage: block.intent === "transactional" ? "decision" : "consideration",
-          difficulty: "low",
-          priority: block.intent === "transactional" ? 5 : 3,
-        });
-      }
-    }
-  }
-
-  // De-dupe
-  const seen = new Set<string>();
-  const all = [...seo, ...geo, ...aeo].filter((x) => {
-    const k = `${x.bucket}:${x.keyword.toLowerCase()}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-
-  return all;
+function mustEnv(name: string) {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing env var: ${name}`);
+  return v;
 }
 
 export async function POST(req: Request) {
-  const supabase = getSupabaseRouteClient();
-  const { data: auth } = await supabase.auth.getUser();
+  try {
+    const body = (await req.json()) as ReqBody;
+    const topic = (body.topic || "").trim();
+    if (!topic) {
+      return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+    }
 
-  if (!auth?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const audience = (body.audience || "").trim();
+    const region = (body.region || "").trim();
+    const language = (body.language || "English").trim();
+
+    const apiKey = mustEnv("OPENAI_API_KEY");
+
+    const prompt = `
+Generate GEO (Generative Engine Optimization), SEO, and AEO (Answer Engine Optimization) keyword clusters.
+
+Context:
+- Topic: ${topic}
+- Audience: ${audience || "general"}
+- Region: ${region || "global"}
+- Language: ${language}
+
+Return STRICT JSON ONLY with this shape:
+{
+  "topic": "...",
+  "seo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
+  "geo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
+  "aeo": { "seed": ["..."], "clusters": [{ "name": "...", "questions": ["..."] }] }
+}
+
+Rules:
+- 8–12 seed keywords per section
+- 4 clusters per section
+- 8–12 items per cluster
+- AEO uses questions people ask
+`.trim();
+
+    // Uses the Responses API. If your project uses a different endpoint already, tell me and I’ll align it.
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        input: prompt,
+      }),
+    });
+
+    const raw = await r.text();
+    if (!r.ok) {
+      return NextResponse.json(
+        { error: "OpenAI request failed", status: r.status, details: raw },
+        { status: 500 }
+      );
+    }
+
+    // Responses API returns JSON; we need the text content.
+    const parsed = JSON.parse(raw);
+    const text =
+      parsed?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text ??
+      "";
+
+    // Parse the STRICT JSON from the model output
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+    if (jsonStart === -1 || jsonEnd === -1) {
+      return NextResponse.json(
+        { error: "Model did not return JSON", raw: text },
+        { status: 500 }
+      );
+    }
+
+    const payload = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+    return NextResponse.json(payload);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message || "Server error" },
+      { status: 500 }
+    );
   }
-
-  const body = (await req.json()) as Payload;
-  if (!body.topic || body.topic.trim().length < 2) {
-    return NextResponse.json({ error: "Topic is required" }, { status: 400 });
-  }
-
-  const items = generateKeywordSet(body);
-
-  // Save run
-  const { data: run, error: runErr } = await supabase
-    .from("keyword_runs")
-    .insert({
-      user_id: auth.user.id,
-      topic: body.topic.trim(),
-      audience: body.audience || null,
-      region: body.region || null,
-      language: body.language || null,
-    })
-    .select("id")
-    .single();
-
-  if (runErr || !run) {
-    return NextResponse.json({ error: "Failed to create run" }, { status: 500 });
-  }
-
-  // Save items
-  const rows = items.map((i) => ({
-    run_id: run.id,
-    keyword: i.keyword,
-    bucket: i.bucket,
-    intent: i.intent,
-    stage: i.stage,
-    difficulty: i.difficulty,
-    priority: i.priority,
-  }));
-
-  const { error: itemsErr } = await supabase.from("keyword_items").insert(rows);
-  if (itemsErr) {
-    return NextResponse.json({ error: "Failed to save keywords" }, { status: 500 });
-  }
-
-  return NextResponse.json({ runId: run.id, items });
 }
