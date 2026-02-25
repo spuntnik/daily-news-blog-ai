@@ -1,6 +1,6 @@
 // apps/web/src/app/api/site/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "../../utils/supabase/server";
+import { supabaseServer } from "../../../utils/supabase/server";
 
 export const runtime = "nodejs";
 
