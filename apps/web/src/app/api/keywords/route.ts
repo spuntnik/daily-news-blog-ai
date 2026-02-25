@@ -1,3 +1,4 @@
+// apps/web/src/app/api/keywords/route.ts
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -20,9 +21,7 @@ export async function POST(req: Request) {
     const body = (await req.json()) as ReqBody;
 
     const topic = (body.topic || "").trim();
-    if (!topic) {
-      return NextResponse.json({ error: "Missing topic" }, { status: 400 });
-    }
+    if (!topic) return NextResponse.json({ error: "Missing topic" }, { status: 400 });
 
     const audience = (body.audience || "general").trim();
     const region = (body.region || "global").trim();
@@ -31,41 +30,103 @@ export async function POST(req: Request) {
     const apiKey = mustEnv("OPENAI_API_KEY");
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    const prompt = `
-Generate GEO (Generative Engine Optimization), SEO, and AEO (Answer Engine Optimization) keyword clusters.
+    const system =
+      "You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Return STRICT JSON only matching the provided schema.";
+    const user = `
+Topic: ${topic}
+Audience: ${audience}
+Region: ${region}
+Language: ${language}
 
-Context:
-- Topic: ${topic}
-- Audience: ${audience}
-- Region: ${region}
-- Language: ${language}
-
-Return STRICT JSON ONLY in this format:
-
-{
-  "topic": "...",
-  "seo": {
-    "seed": ["..."],
-    "clusters": [{ "name": "...", "keywords": ["..."] }]
-  },
-  "geo": {
-    "seed": ["..."],
-    "clusters": [{ "name": "...", "keywords": ["..."] }]
-  },
-  "aeo": {
-    "seed": ["..."],
-    "clusters": [{ "name": "...", "questions": ["..."] }]
-  }
-}
-
-Rules:
-- 8–12 seed keywords per section
+Generate:
+- 8–12 seed keywords per section (seo/geo/aeo)
 - 4 clusters per section
 - 8–12 items per cluster
-- AEO questions must end with "?"
+- AEO clusters must be questions people ask (strings ending with ?)
 `.trim();
 
-    const r = await fetch("https://api.openai.com/v1/responses", {
+    const schema = {
+      name: "keyword_clusters",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["topic", "seo", "geo", "aeo"],
+        properties: {
+          topic: { type: "string" },
+          seo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "keywords"],
+                  properties: {
+                    name: { type: "string" },
+                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+          geo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "keywords"],
+                  properties: {
+                    name: { type: "string" },
+                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+          aeo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "questions"],
+                  properties: {
+                    name: { type: "string" },
+                    questions: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      strict: true,
+    } as const;
+
+    // IMPORTANT: "response_format: json_schema" is supported on the Chat Completions API
+    // for compatible models (including gpt-4o-mini in your allowed list).
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -73,7 +134,11 @@ Rules:
       },
       body: JSON.stringify({
         model,
-        input: prompt,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_schema", json_schema: schema },
       }),
     });
 
@@ -87,31 +152,18 @@ Rules:
     }
 
     const parsed = JSON.parse(raw);
+    const content = parsed?.choices?.[0]?.message?.content;
 
-    const text =
-      parsed?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text || "";
-
-    if (!text) {
+    if (!content) {
       return NextResponse.json({ error: "Empty model response", raw: parsed }, { status: 500 });
     }
 
-    const jsonStart = text.indexOf("{");
-    const jsonEnd = text.lastIndexOf("}");
+    // content is a JSON string because of json_schema
+    const payload = JSON.parse(content);
 
-    if (jsonStart === -1 || jsonEnd === -1) {
-      return NextResponse.json(
-        { error: "Model did not return JSON", raw: text },
-        { status: 500 }
-      );
-    }
-
-    const payload = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-
+    // Return the NEW payload shape (topic/seo/geo/aeo)
     return NextResponse.json(payload);
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
 }
