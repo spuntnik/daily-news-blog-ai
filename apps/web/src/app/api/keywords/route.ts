@@ -15,6 +15,13 @@ function mustEnv(name: string) {
   return v;
 }
 
+function extractJsonFromText(text: string) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return JSON.parse(text.slice(start, end + 1));
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReqBody;
@@ -29,100 +36,29 @@ export async function POST(req: Request) {
     const apiKey = mustEnv("OPENAI_API_KEY");
     const model = process.env.OPENAI_MODEL || "o4-mini-deep-research";
 
-    const system = `You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Always follow the provided JSON schema exactly.`;
-    const user = `
-Topic: ${topic}
-Audience: ${audience}
-Region: ${region}
-Language: ${language}
+    const prompt = `
+Return STRICT JSON ONLY with this shape:
+{
+  "topic": "...",
+  "seo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
+  "geo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
+  "aeo": { "seed": ["..."], "clusters": [{ "name": "...", "questions": ["..."] }] }
+}
 
-Generate:
-- 8–12 seed keywords per section (seo/geo/aeo)
+Context:
+- Topic: ${topic}
+- Audience: ${audience}
+- Region: ${region}
+- Language: ${language}
+
+Rules:
+- 8–12 seed keywords per section
 - 4 clusters per section
 - 8–12 items per cluster
-- AEO clusters must be questions people ask (strings ending with ?)
+- AEO uses questions people ask (each ends with "?")
 `.trim();
 
-    const schema = {
-      name: "keyword_clusters",
-      schema: {
-        type: "object",
-        additionalProperties: false,
-        required: ["topic", "seo", "geo", "aeo"],
-        properties: {
-          topic: { type: "string" },
-          seo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "keywords"],
-                  properties: {
-                    name: { type: "string" },
-                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
-              },
-            },
-          },
-          geo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "keywords"],
-                  properties: {
-                    name: { type: "string" },
-                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
-              },
-            },
-          },
-          aeo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "questions"],
-                  properties: {
-                    name: { type: "string" },
-                    questions: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      strict: true,
-    } as const;
-
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    const r = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -130,31 +66,49 @@ Generate:
       },
       body: JSON.stringify({
         model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        response_format: { type: "json_schema", json_schema: schema },
+        input: prompt,
       }),
     });
 
-    const raw = await r.text();
+    const rawText = await r.text();
 
     if (!r.ok) {
-      // Return the real OpenAI status so your UI can show it properly
       return NextResponse.json(
-        { error: "OpenAI request failed", status: r.status, details: raw },
+        { error: "OpenAI request failed", status: r.status, details: rawText },
         { status: r.status }
       );
     }
 
-    const parsed = JSON.parse(raw);
-    const content = parsed?.choices?.[0]?.message?.content;
-    if (!content) {
-      return NextResponse.json({ error: "Empty model response", raw: parsed }, { status: 500 });
+    const raw = JSON.parse(rawText);
+
+    // Try structured JSON output first (if present)
+    // Some responses include output_json; others return output_text.
+    let payload: any = null;
+
+    // Attempt to find any content item that looks like JSON
+    const output = raw?.output || [];
+    for (const item of output) {
+      const contentArr = item?.content || [];
+      for (const c of contentArr) {
+        if (c?.type === "output_json" && c?.json) {
+          payload = c.json;
+          break;
+        }
+        if (c?.type === "output_text" && typeof c?.text === "string") {
+          payload = extractJsonFromText(c.text);
+          if (payload) break;
+        }
+      }
+      if (payload) break;
     }
 
-    const payload = JSON.parse(content);
+    if (!payload) {
+      return NextResponse.json(
+        { error: "Model did not return JSON", raw },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(payload);
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
