@@ -15,35 +15,24 @@ function mustEnv(name: string) {
   return v;
 }
 
-function extractJsonFromText(text: string) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  return JSON.parse(text.slice(start, end + 1));
-}
-
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReqBody;
 
     const topic = (body.topic || "").trim();
-    if (!topic) return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+    if (!topic) {
+      return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+    }
 
     const audience = (body.audience || "general").trim();
     const region = (body.region || "global").trim();
     const language = (body.language || "English").trim();
 
     const apiKey = mustEnv("OPENAI_API_KEY");
-    const model = process.env.OPENAI_MODEL || "o4-mini-deep-research";
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
     const prompt = `
-Return STRICT JSON ONLY with this shape:
-{
-  "topic": "...",
-  "seo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
-  "geo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
-  "aeo": { "seed": ["..."], "clusters": [{ "name": "...", "questions": ["..."] }] }
-}
+Generate GEO (Generative Engine Optimization), SEO, and AEO (Answer Engine Optimization) keyword clusters.
 
 Context:
 - Topic: ${topic}
@@ -51,11 +40,29 @@ Context:
 - Region: ${region}
 - Language: ${language}
 
+Return STRICT JSON ONLY in this format:
+
+{
+  "topic": "...",
+  "seo": {
+    "seed": ["..."],
+    "clusters": [{ "name": "...", "keywords": ["..."] }]
+  },
+  "geo": {
+    "seed": ["..."],
+    "clusters": [{ "name": "...", "keywords": ["..."] }]
+  },
+  "aeo": {
+    "seed": ["..."],
+    "clusters": [{ "name": "...", "questions": ["..."] }]
+  }
+}
+
 Rules:
 - 8–12 seed keywords per section
 - 4 clusters per section
 - 8–12 items per cluster
-- AEO uses questions people ask (each ends with "?")
+- AEO questions must end with "?"
 `.trim();
 
     const r = await fetch("https://api.openai.com/v1/responses", {
@@ -70,47 +77,41 @@ Rules:
       }),
     });
 
-    const rawText = await r.text();
+    const raw = await r.text();
 
     if (!r.ok) {
       return NextResponse.json(
-        { error: "OpenAI request failed", status: r.status, details: rawText },
+        { error: "OpenAI request failed", status: r.status, details: raw },
         { status: r.status }
       );
     }
 
-    const raw = JSON.parse(rawText);
+    const parsed = JSON.parse(raw);
 
-    // Try structured JSON output first (if present)
-    // Some responses include output_json; others return output_text.
-    let payload: any = null;
+    const text =
+      parsed?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text || "";
 
-    // Attempt to find any content item that looks like JSON
-    const output = raw?.output || [];
-    for (const item of output) {
-      const contentArr = item?.content || [];
-      for (const c of contentArr) {
-        if (c?.type === "output_json" && c?.json) {
-          payload = c.json;
-          break;
-        }
-        if (c?.type === "output_text" && typeof c?.text === "string") {
-          payload = extractJsonFromText(c.text);
-          if (payload) break;
-        }
-      }
-      if (payload) break;
+    if (!text) {
+      return NextResponse.json({ error: "Empty model response", raw: parsed }, { status: 500 });
     }
 
-    if (!payload) {
+    const jsonStart = text.indexOf("{");
+    const jsonEnd = text.lastIndexOf("}");
+
+    if (jsonStart === -1 || jsonEnd === -1) {
       return NextResponse.json(
-        { error: "Model did not return JSON", raw },
+        { error: "Model did not return JSON", raw: text },
         { status: 500 }
       );
     }
 
+    const payload = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+
     return NextResponse.json(payload);
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
