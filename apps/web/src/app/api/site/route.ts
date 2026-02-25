@@ -1,12 +1,12 @@
+// apps/web/src/app/api/site/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/utils/supabase/server";
+import { supabaseServer } from "../../utils/supabase/server";
 
 export const runtime = "nodejs";
 
 function normalizeUrl(input: string) {
   const raw = (input || "").trim();
   if (!raw) return "";
-  // If user types agseostudio.com without scheme, add https://
   if (!raw.startsWith("http://") && !raw.startsWith("https://")) return `https://${raw}`;
   return raw;
 }
