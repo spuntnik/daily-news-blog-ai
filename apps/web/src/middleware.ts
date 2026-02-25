@@ -41,14 +41,15 @@ if (req.nextUrl.pathname.startsWith("/login") && data.user) {
   return NextResponse.redirect(redirectUrl);
 }
   const protectedRoutes = [
-    "/dashboard",
-    "/generator",
-    "/keywords",
-    "/library",
-    "/settings",
-    "/channels",
-    "/trends"
-  ];
+  "/site",
+  "/dashboard",
+  "/generator",
+  "/keywords",
+  "/library",
+  "/settings",
+  "/channels",
+  "/trends",
+];
 
   const isProtected = protectedRoutes.some(route =>
     req.nextUrl.pathname.startsWith(route)
