@@ -22,23 +22,28 @@ export async function middleware(req: NextRequest) {
   );
 
   const { data } = await supabase.auth.getUser();
-  // If user is logged in and tries to access /login, route them properly
-if (req.nextUrl.pathname.startsWith("/login") && data.user) {
-  // Check if onboarding is complete
+// If logged in but onboarding not completed, force /site (except when already on /site or /api)
+if (data.user) {
   const { data: siteRow } = await supabase
     .from("user_sites")
     .select("site_url")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  const redirectUrl = req.nextUrl.clone();
-  redirectUrl.pathname = siteRow?.site_url ? "/dashboard" : "/site";
-  return NextResponse.redirect(redirectUrl);
-}  
-  if (req.nextUrl.pathname.startsWith("/login") && data.user) {
-  const redirectUrl = req.nextUrl.clone();
-  redirectUrl.pathname = "/dashboard";
-  return NextResponse.redirect(redirectUrl);
+  const hasSite = !!siteRow?.site_url;
+
+  const pathname = req.nextUrl.pathname;
+
+  const allowedWithoutSite =
+    pathname.startsWith("/site") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/logout");
+
+  if (!hasSite && !allowedWithoutSite) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/site";
+    return NextResponse.redirect(redirectUrl);
+  }
 }
   const protectedRoutes = [
   "/site",
