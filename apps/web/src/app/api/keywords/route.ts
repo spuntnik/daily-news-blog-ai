@@ -18,84 +18,145 @@ function mustEnv(name: string) {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReqBody;
-    const topic = (body.topic || "").trim();
-    if (!topic) {
-      return NextResponse.json({ error: "Missing topic" }, { status: 400 });
-    }
 
-    const audience = (body.audience || "").trim();
-    const region = (body.region || "").trim();
+    const topic = (body.topic || "").trim();
+    if (!topic) return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+
+    const audience = (body.audience || "general").trim();
+    const region = (body.region || "global").trim();
     const language = (body.language || "English").trim();
 
     const apiKey = mustEnv("OPENAI_API_KEY");
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    const prompt = `
-Generate GEO (Generative Engine Optimization), SEO, and AEO (Answer Engine Optimization) keyword clusters.
+    const system = `You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Always follow the provided JSON schema exactly.`;
+    const user = `
+Topic: ${topic}
+Audience: ${audience}
+Region: ${region}
+Language: ${language}
 
-Context:
-- Topic: ${topic}
-- Audience: ${audience || "general"}
-- Region: ${region || "global"}
-- Language: ${language}
-
-Return STRICT JSON ONLY with this shape:
-{
-  "topic": "...",
-  "seo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
-  "geo": { "seed": ["..."], "clusters": [{ "name": "...", "keywords": ["..."] }] },
-  "aeo": { "seed": ["..."], "clusters": [{ "name": "...", "questions": ["..."] }] }
-}
-
-Rules:
-- 8–12 seed keywords per section
+Generate:
+- 8–12 seed keywords per section (seo/geo/aeo)
 - 4 clusters per section
 - 8–12 items per cluster
-- AEO uses questions people ask
+- AEO clusters must be questions people ask (strings ending with ?)
 `.trim();
 
-    // Uses the Responses API. If your project uses a different endpoint already, tell me and I’ll align it.
-    const r = await fetch("https://api.openai.com/v1/responses", {
+    const schema = {
+      name: "keyword_clusters",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["topic", "seo", "geo", "aeo"],
+        properties: {
+          topic: { type: "string" },
+          seo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "keywords"],
+                  properties: {
+                    name: { type: "string" },
+                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+          geo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "keywords"],
+                  properties: {
+                    name: { type: "string" },
+                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+          aeo: {
+            type: "object",
+            additionalProperties: false,
+            required: ["seed", "clusters"],
+            properties: {
+              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              clusters: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["name", "questions"],
+                  properties: {
+                    name: { type: "string" },
+                    questions: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      strict: true,
+    } as const;
+
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        input: prompt,
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        response_format: { type: "json_schema", json_schema: schema },
       }),
     });
 
     const raw = await r.text();
+
     if (!r.ok) {
+      // Return the real OpenAI status so your UI can show it properly
       return NextResponse.json(
         { error: "OpenAI request failed", status: r.status, details: raw },
-        { status: 500 }
+        { status: r.status }
       );
     }
 
-    // Responses API returns JSON; we need the text content.
     const parsed = JSON.parse(raw);
-    const text =
-      parsed?.output?.[0]?.content?.find((c: any) => c.type === "output_text")?.text ??
-      "";
-
-    // Parse the STRICT JSON from the model output
-    const jsonStart = text.indexOf("{");
-    const jsonEnd = text.lastIndexOf("}");
-    if (jsonStart === -1 || jsonEnd === -1) {
-      return NextResponse.json(
-        { error: "Model did not return JSON", raw: text },
-        { status: 500 }
-      );
+    const content = parsed?.choices?.[0]?.message?.content;
+    if (!content) {
+      return NextResponse.json({ error: "Empty model response", raw: parsed }, { status: 500 });
     }
 
-    const payload = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+    const payload = JSON.parse(content);
     return NextResponse.json(payload);
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message || "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
 }
