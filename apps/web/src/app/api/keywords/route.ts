@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const language = (body.language || "English").trim();
 
     const apiKey = mustEnv("OPENAI_API_KEY");
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const model = process.env.OPENAI_MODEL || "o4-mini-deep-research";
 
     const system = `You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Always follow the provided JSON schema exactly.`;
     const user = `
