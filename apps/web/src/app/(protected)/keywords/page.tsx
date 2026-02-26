@@ -1,7 +1,8 @@
 // apps/web/src/app/(protected)/keywords/page.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { usePageState } from "@/utils/usePageState";
 
 type Cluster = {
   name: string;
@@ -24,15 +25,27 @@ type Row = {
 };
 
 export default function KeywordsPage() {
-  const [topic, setTopic] = useState("");
-  const [audience, setAudience] = useState("content creators and agencies");
-  const [region, setRegion] = useState("Singapore");
-  const [language, setLanguage] = useState("English");
-  const [loading, setLoading] = useState(false);
+  const { state, setState } = usePageState("/keywords", {
+    topic: "",
+    audience: "content creators and agencies",
+    region: "Singapore",
+    language: "English",
+    loading: false,
+    data: null as ApiPayload | null,
+    rows: [] as Row[],
+    error: null as string | null,
+  });
 
-  const [data, setData] = useState<ApiPayload | null>(null);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    topic,
+    audience,
+    region,
+    language,
+    loading,
+    data,
+    rows,
+    error,
+  } = state;
 
   const grouped = useMemo(() => {
     const buckets: Record<string, Row[]> = { SEO: [], GEO: [], AEO: [] };
@@ -41,10 +54,13 @@ export default function KeywordsPage() {
   }, [rows]);
 
   async function generate() {
-    setLoading(true);
-    setError(null);
-    setData(null);
-    setRows([]);
+    setState((s) => ({
+      ...s,
+      loading: true,
+      error: null,
+      data: null,
+      rows: [],
+    }));
 
     try {
       const res = await fetch("/api/keywords", {
@@ -57,7 +73,6 @@ export default function KeywordsPage() {
       if (!res.ok) throw new Error(json?.error || "Request failed");
 
       const payload = json as ApiPayload;
-      setData(payload);
 
       const nextRows: Row[] = [];
 
@@ -106,27 +121,39 @@ export default function KeywordsPage() {
         }
       }
 
-      setRows(nextRows);
+      setState((s) => ({
+        ...s,
+        loading: false,
+        data: payload,
+        rows: nextRows,
+      }));
     } catch (e: any) {
-      setError(e?.message || "Something went wrong");
-    } finally {
-      setLoading(false);
+      setState((s) => ({
+        ...s,
+        loading: false,
+        error: e?.message || "Something went wrong",
+      }));
     }
   }
 
   function exportJson() {
     if (!data) return;
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `keywords-${(data.topic || "topic").toLowerCase().replace(/\s+/g, "-")}.json`;
+    a.download = `keywords-${(data.topic || "topic")
+      .toLowerCase()
+      .replace(/\s+/g, "-")}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   function exportCsv() {
     if (!rows.length) return;
+
     const header = ["bucket", "type", "cluster", "value"];
     const csvLines = [
       header.join(","),
@@ -141,11 +168,17 @@ export default function KeywordsPage() {
           .join(",")
       ),
     ];
-    const blob = new Blob([csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
+
+    const blob = new Blob([csvLines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `keywords-${(data?.topic || "topic").toLowerCase().replace(/\s+/g, "-")}.csv`;
+    a.download = `keywords-${(data?.topic || "topic")
+      .toLowerCase()
+      .replace(/\s+/g, "-")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -154,7 +187,7 @@ export default function KeywordsPage() {
     <div>
       <h1>Keywords</h1>
       <p style={{ opacity: 0.8 }}>
-        Generate GEO/SEO/AEO keyword clusters and save them to your library.
+        Generate GEO/SEO/AEO keyword clusters and save them.
       </p>
 
       <div style={{ display: "grid", gap: 10, maxWidth: 780 }}>
@@ -162,8 +195,9 @@ export default function KeywordsPage() {
           Topic
           <input
             value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="e.g., diabetic meal plan, AI resume writing, skincare serum"
+            onChange={(e) =>
+              setState((s) => ({ ...s, topic: e.target.value }))
+            }
             style={{ width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
@@ -173,7 +207,9 @@ export default function KeywordsPage() {
             Audience
             <input
               value={audience}
-              onChange={(e) => setAudience(e.target.value)}
+              onChange={(e) =>
+                setState((s) => ({ ...s, audience: e.target.value }))
+              }
               style={{ width: "100%", padding: 10, marginTop: 6 }}
             />
           </label>
@@ -182,7 +218,9 @@ export default function KeywordsPage() {
             Region
             <input
               value={region}
-              onChange={(e) => setRegion(e.target.value)}
+              onChange={(e) =>
+                setState((s) => ({ ...s, region: e.target.value }))
+              }
               style={{ width: "100%", padding: 10, marginTop: 6 }}
             />
           </label>
@@ -192,13 +230,15 @@ export default function KeywordsPage() {
           Language
           <input
             value={language}
-            onChange={(e) => setLanguage(e.target.value)}
+            onChange={(e) =>
+              setState((s) => ({ ...s, language: e.target.value }))
+            }
             style={{ width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={generate} disabled={loading || topic.trim().length < 2}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={generate} disabled={loading || topic.length < 2}>
             {loading ? "Generating..." : "Generate keywords"}
           </button>
 
@@ -212,114 +252,11 @@ export default function KeywordsPage() {
         </div>
 
         {error && <div style={{ color: "crimson" }}>{error}</div>}
-
-        {data?.topic && (
-          <div style={{ opacity: 0.8 }}>
-            Generated for: <strong>{data.topic}</strong>
-          </div>
-        )}
       </div>
 
       {rows.length > 0 && (
-        <div style={{ marginTop: 24, display: "grid", gap: 20 }}>
-          <Bucket
-            title="SEO Keywords"
-            seedCount={data?.seo.seed?.length || 0}
-            clusterCount={data?.seo.clusters?.length || 0}
-            rows={grouped.SEO}
-            valueLabel="Keyword"
-          />
-          <Bucket
-            title="GEO Keywords"
-            seedCount={data?.geo.seed?.length || 0}
-            clusterCount={data?.geo.clusters?.length || 0}
-            rows={grouped.GEO}
-            valueLabel="Keyword"
-          />
-          <Bucket
-            title="AEO Questions"
-            seedCount={data?.aeo.seed?.length || 0}
-            clusterCount={data?.aeo.clusters?.length || 0}
-            rows={grouped.AEO}
-            valueLabel="Question"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Bucket({
-  title,
-  seedCount,
-  clusterCount,
-  rows,
-  valueLabel,
-}: {
-  title: string;
-  seedCount: number;
-  clusterCount: number;
-  rows: Row[];
-  valueLabel: string;
-}) {
-  const seeds = rows.filter((r) => r.type === "seed");
-  const clusters = rows.filter((r) => r.type === "cluster");
-
-  return (
-    <div style={{ border: "1px solid #eee", borderRadius: 10, padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ marginTop: 0 }}>{title}</h2>
-        <div style={{ opacity: 0.75 }}>
-          Seeds: <strong>{seedCount}</strong> · Clusters: <strong>{clusterCount}</strong> · Total:{" "}
-          <strong>{rows.length}</strong>
-        </div>
-      </div>
-
-      {seeds.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Seed list</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {seeds.map((s, idx) => (
-              <span
-                key={idx}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 999,
-                  padding: "6px 10px",
-                  fontSize: 13,
-                }}
-              >
-                {s.value}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{ marginTop: 14, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th align="left">Cluster</th>
-              <th align="left">{valueLabel}</th>
-              <th align="left">Type</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clusters.slice(0, 80).map((r, idx) => (
-              <tr key={idx}>
-                <td style={{ padding: "8px 0" }}>{r.clusterName || "-"}</td>
-                <td>{r.value}</td>
-                <td>{r.type}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {clusters.length > 80 && (
-        <div style={{ marginTop: 10, opacity: 0.7 }}>
-          Showing 80 of {clusters.length} cluster items. (Pagination can be added.)
+        <div style={{ marginTop: 24 }}>
+          <h2>Results ({rows.length})</h2>
         </div>
       )}
     </div>
