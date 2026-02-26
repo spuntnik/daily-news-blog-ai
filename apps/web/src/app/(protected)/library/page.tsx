@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabaseBrowser } from "@/utils/supabase/browser";
+import { supabaseBrowser } from "../../../utils/supabase/browser";
 
 export default function LibraryPage() {
   const supabase = supabaseBrowser();
