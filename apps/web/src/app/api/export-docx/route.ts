@@ -36,13 +36,16 @@ export async function POST(req: Request) {
     ],
   });
 
-  const buffer = await Packer.toBuffer(doc);
+    const buffer = await Packer.toBuffer(doc);
 
-  return new NextResponse(buffer, {
+  // Convert Node Buffer -> Uint8Array (BodyInit compatible)
+  const bytes = new Uint8Array(buffer);
+
+  return new NextResponse(bytes, {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="${data.title}.docx"`,
+      "Content-Disposition": `attachment; filename="${(data.title || "blog").replace(/[^a-z0-9-_ ]/gi, "").trim() || "blog"}.docx"`,
     },
   });
 }
