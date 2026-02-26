@@ -26,5 +26,13 @@ async function saveToLibrary({
 
   if (error) {
     console.error(error);
+
+    await saveToLibrary({
+  title,
+  excerpt,
+  contentMd,
+  contentHtml,
+  sources,
+});
   }
 }
