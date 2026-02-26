@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabaseBrowser } from "@/utils/supabase/browser";
+import { supabaseBrowser } from "../../../utils/supabase/browser";
 
 type SourceItem = { title?: string; url?: string; publisher?: string };
 
