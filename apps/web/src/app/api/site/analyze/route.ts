@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { supabaseServer } from "../../../../utils/supabase/server";
 
 export const runtime = "nodejs";
 
 type ReqBody = {
   siteUrl: string;
-  extraContext?: string; // optional user notes
-  regionHint?: string;   // optional: "Singapore", "Malaysia", etc.
+  extraContext?: string;
+  regionHint?: string;
 };
 
 function mustEnv(name: string) {
@@ -21,7 +22,7 @@ function normalizeUrl(input: string) {
   return raw;
 }
 
-// Very lightweight HTML signal extraction (no external deps)
+// Lightweight extraction
 function extractSignals(html: string) {
   const pick = (re: RegExp) => {
     const m = html.match(re);
@@ -36,13 +37,13 @@ function extractSignals(html: string) {
 
   const h1 = pick(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
 
-  // Pull a few H2s
   const h2s: string[] = [];
   const h2re = /<h2[^>]*>([\s\S]*?)<\/h2>/gi;
   let m;
-  while ((m = h2re.exec(html)) && h2s.length < 8) h2s.push(m[1].replace(/<[^>]+>/g, "").trim());
+  while ((m = h2re.exec(html)) && h2s.length < 8) {
+    h2s.push(m[1].replace(/<[^>]+>/g, "").trim());
+  }
 
-  // Body text sample (strip tags crudely, keep short)
   const bodyText = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -56,29 +57,30 @@ function extractSignals(html: string) {
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as ReqBody;
+    const supabase = supabaseServer();
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const body = (await req.json()) as ReqBody;
     const siteUrl = normalizeUrl(body.siteUrl || "");
     if (!siteUrl) return NextResponse.json({ error: "Missing siteUrl" }, { status: 400 });
 
     const extraContext = (body.extraContext || "").trim();
     const regionHint = (body.regionHint || "").trim();
 
-    // Fetch target site
     const resp = await fetch(siteUrl, {
       method: "GET",
       redirect: "follow",
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; AGSEOStudioBot/1.0; +https://agseostudio.com)",
-        "Accept": "text/html,application/xhtml+xml",
+        "User-Agent": "Mozilla/5.0 (compatible; AGSEOStudioBot/1.0; +https://agseostudio.com)",
+        Accept: "text/html,application/xhtml+xml",
       },
     });
 
     const html = await resp.text();
     if (!resp.ok) {
       return NextResponse.json(
-        { error: "Failed to fetch site", status: resp.status },
+        { error: "Failed to fetch site", status: resp.status, details: html?.slice?.(0, 300) },
         { status: 400 }
       );
     }
@@ -93,7 +95,16 @@ export async function POST(req: Request) {
       schema: {
         type: "object",
         additionalProperties: false,
-        required: ["siteUrl", "industry", "audiences", "markets", "topics", "competitors", "needsClarification", "suggestedPromptQuestions"],
+        required: [
+          "siteUrl",
+          "industry",
+          "audiences",
+          "markets",
+          "topics",
+          "competitors",
+          "needsClarification",
+          "suggestedPromptQuestions",
+        ],
         properties: {
           siteUrl: { type: "string" },
           industry: { type: "string" },
@@ -112,15 +123,15 @@ export async function POST(req: Request) {
                 name: { type: "string" },
                 url: { type: "string" },
                 confidence: { type: "string", enum: ["low", "medium", "high"] },
-                note: { type: "string" }
-              }
-            }
+                note: { type: "string" },
+              },
+            },
           },
           needsClarification: { type: "boolean" },
-          suggestedPromptQuestions: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 }
-        }
+          suggestedPromptQuestions: { type: "array", items: { type: "string" }, minItems: 0, maxItems: 8 },
+        },
       },
-      strict: true
+      strict: true,
     } as const;
 
     const system =
@@ -143,17 +154,14 @@ Task:
 2) Identify target audiences (roles/types).
 3) Identify markets served (countries/regions) using regionHint if provided.
 4) Propose blog topic themes (6–20) that match the site.
-5) Suggest competitors: if you cannot be sure, still provide plausible competitors but mark confidence low and explain in note. Use valid URL-like strings when possible.
+5) Suggest competitors: if you cannot be sure, still provide plausible competitors but mark confidence low and explain in note.
 6) If the signals are too thin, set needsClarification=true and ask up to 8 questions.
-Return strict JSON only (schema enforced).
+Return strict JSON only.
 `.trim();
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
         messages: [
@@ -178,7 +186,29 @@ Return strict JSON only (schema enforced).
 
     const profile = JSON.parse(content);
 
-    return NextResponse.json({ profile, signals: { title: signals.title, metaDescription: signals.metaDescription, h1: signals.h1, h2s: signals.h2s } });
+    // Persist site_url + profile so /site and dashboard can use it
+    const { error: upsertErr } = await supabase
+      .from("user_sites")
+      .upsert(
+        { user_id: auth.user.id, site_url: siteUrl, profile },
+        { onConflict: "user_id" }
+      );
+
+    if (upsertErr) {
+      return NextResponse.json({ error: upsertErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      siteUrl,
+      profile,
+      signals: {
+        title: signals.title,
+        metaDescription: signals.metaDescription,
+        h1: signals.h1,
+        h2s: signals.h2s,
+      },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
