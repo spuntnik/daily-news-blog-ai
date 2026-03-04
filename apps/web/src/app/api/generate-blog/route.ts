@@ -1,3 +1,4 @@
+// apps/web/src/app/api/generate-blog/route.ts
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -17,78 +18,118 @@ function mustEnv(name: string) {
   return v;
 }
 
+// Accept both OLD keyword shape:
+// { seed: string[], clusters: [{ name, keywords[] }] }
+// and NEW shape (if you upgraded):
+// { primary: string[], long_tail: string[], clusters: ... }
+function normalizeKeywords(section: any) {
+  const out = {
+    primary: [] as string[],
+    longTail: [] as string[],
+    clusters: [] as { name: string; items: string[] }[],
+  };
+
+  if (!section) return out;
+
+  // NEW
+  if (Array.isArray(section.primary)) out.primary.push(...section.primary);
+  if (Array.isArray(section.long_tail)) out.longTail.push(...section.long_tail);
+
+  // OLD seed => treat as primary
+  if (Array.isArray(section.seed)) out.primary.push(...section.seed);
+
+  // clusters
+  const clusters = Array.isArray(section.clusters) ? section.clusters : [];
+  for (const c of clusters) {
+    const name = String(c?.name || "").trim() || "Cluster";
+    const items =
+      Array.isArray(c?.keywords) ? c.keywords :
+      Array.isArray(c?.questions) ? c.questions :
+      [];
+    out.clusters.push({
+      name,
+      items: items.map((x: any) => String(x).trim()).filter(Boolean),
+    });
+  }
+
+  // De-dupe + trim
+  const dedupe = (arr: string[]) =>
+    Array.from(new Set(arr.map((s) => s.trim()).filter(Boolean))).slice(0, 60);
+
+  out.primary = dedupe(out.primary);
+  out.longTail = dedupe(out.longTail);
+
+  return out;
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReqBody;
 
-    const topic = (body.topic || "").trim();
-    if (!topic) return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+    const topic = String(body.topic || "").trim();
+    if (!topic) {
+      return NextResponse.json({ error: "Missing topic" }, { status: 400 });
+    }
 
-    const audience = (body.audience || "general").trim();
-    const region = (body.region || "global").trim();
+    const audience = String(body.audience || "general readers").trim();
+    const region = String(body.region || "global").trim();
 
-    // Collect keywords defensively (supports old seed/clusters schema)
-    const pick = (arr: any) => (Array.isArray(arr) ? arr.filter(Boolean) : []);
-    const fromSeedClusters = (obj: any) => {
-      const seeds = pick(obj?.seed);
-      const clusters = pick(obj?.clusters).flatMap((c: any) => pick(c?.keywords || c?.questions));
-      return [...seeds, ...clusters];
-    };
+    const seo = normalizeKeywords(body.seo);
+    const geo = normalizeKeywords(body.geo);
+    const aeo = normalizeKeywords(body.aeo);
 
-    const seoList = fromSeedClusters(body.seo);
-    const geoList = fromSeedClusters(body.geo);
-    const aeoList = fromSeedClusters(body.aeo);
+    // Keep prompt compact and practical
+    const primaryKw = [...seo.primary, ...geo.primary].slice(0, 18);
+    const longTailKw = [...seo.longTail, ...geo.longTail].slice(0, 18);
 
-    const primaryKw = seoList.slice(0, 8);
-    const longTailKw = [...seoList, ...geoList].filter((k) => String(k).split(" ").length >= 4).slice(0, 10);
-    const geoKw = geoList.slice(0, 8);
-    const questions = aeoList.slice(0, 8);
+    const aeoQuestions = (() => {
+      // Prefer NEW long_tail for AEO if present, else cluster questions
+      const qs = [...aeo.longTail, ...aeo.primary];
+      if (qs.length) return qs.slice(0, 10);
+      const fromClusters = aeo.clusters.flatMap((c) => c.items);
+      return fromClusters.slice(0, 10);
+    })();
 
     const apiKey = mustEnv("OPENAI_API_KEY");
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
     const system = `
-You are a professional SEO blog writer.
+You are an SEO blog writer who writes like a real human, not like an outline generator.
 
 Hard rules:
-- Output MUST be English.
-- Do NOT sound like an AI outline or a checklist.
-- Write like a real person: natural transitions, varied sentence length, no robotic phrasing.
-- Avoid “In this article…”, “In conclusion…”, and generic filler.
-- Use inclusive language where natural (we, our).
-- Avoid excessive bullet lists. Use bullets only when it truly helps.
+- Output MUST be in English.
+- Do NOT translate keywords into other languages.
+- Do NOT add language prefixes like "Le", "La", "Les".
+- Avoid “AI-ish” filler. No hype words like Unlock/Unleash/Optimize/Journey.
+- Sound conversational and clear. Short paragraphs. Natural transitions.
+- Use headings, but keep them human (not robotic).
+- Write in Markdown.
 
-Structure required (Markdown):
-- One clear Title (returned as "title")
-- Excerpt (1–2 sentences, returned as "excerpt")
-- Blog Markdown (returned as "content_md") with:
-  # H1 (same as title or close)
-  ## 4–6 H2 sections (each with 2–5 paragraphs, not just 1-liners)
-  ### Optional H3s where helpful
-  A short FAQ at the end using AEO questions
+Content requirements:
+- Start with a strong opening that feels grounded and practical.
+- Use ONE H1 at the top.
+- Use H2/H3 where it helps readability.
+- Weave the provided keywords naturally (do not stuff).
+- Include a short FAQ section that answers AEO questions plainly.
+- End with a simple, realistic next step.
 
-SEO usage rules:
-- Use primary keywords naturally in the H1 and early H2 sections.
-- Use long-tail keywords in body paragraphs (not stuffed).
-- Use GEO keywords naturally when referencing the region.
-- FAQ must answer AEO questions clearly and briefly.
-
-Return JSON only with keys: title, excerpt, content_md
+Return ONLY valid JSON matching the schema.
 `.trim();
-    
+
     const user = `
 Topic: ${topic}
 Audience: ${audience}
-Region: ${region}
+Region context: ${region}
 
-Primary keywords: ${primaryKw.join(", ")}
-Long-tail keywords: ${longTailKw.join(", ")}
-Geo keywords: ${geoKw.join(", ")}
-AEO questions: ${questions.join(" | ")}
+Primary keywords (use many, naturally): ${JSON.stringify(primaryKw)}
+Long-tail keywords (sprinkle naturally): ${JSON.stringify(longTailKw)}
+
+AEO questions for FAQ (answer 5–8): ${JSON.stringify(aeoQuestions)}
 `.trim();
 
     const schema = {
-      name: "blog_payload",
+      name: "blog_post",
+      strict: true,
       schema: {
         type: "object",
         additionalProperties: false,
@@ -99,7 +140,6 @@ AEO questions: ${questions.join(" | ")}
           content_md: { type: "string" },
         },
       },
-      strict: true,
     } as const;
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -110,25 +150,56 @@ AEO questions: ${questions.join(" | ")}
       },
       body: JSON.stringify({
         model,
+        temperature: 0.7,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
         ],
         response_format: { type: "json_schema", json_schema: schema },
-        temperature: 0.7,
       }),
     });
 
     const raw = await r.text();
-    if (!r.ok) return NextResponse.json({ error: "OpenAI request failed", details: raw }, { status: r.status });
+    if (!r.ok) {
+      return NextResponse.json(
+        { error: "OpenAI request failed", status: r.status, details: raw },
+        { status: r.status }
+      );
+    }
 
     const parsed = JSON.parse(raw);
     const content = parsed?.choices?.[0]?.message?.content;
-    if (!content) return NextResponse.json({ error: "Empty model response", details: parsed }, { status: 500 });
+    if (!content) {
+      return NextResponse.json(
+        { error: "Empty model response", raw: parsed },
+        { status: 500 }
+      );
+    }
 
+    // content is a JSON string because of json_schema
     const payload = JSON.parse(content);
+
+    // Safety cleanup: strip accidental French articles if they still appear
+    const stripLeLa = (s: string) =>
+      s
+        .replace(/\b(Le|La|Les)\s+/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+    payload.title = stripLeLa(String(payload.title || topic));
+    payload.excerpt = String(payload.excerpt || "").trim();
+    payload.content_md = String(payload.content_md || "").trim();
+
+    // Ensure H1 exists at top
+    if (!payload.content_md.startsWith("# ")) {
+      payload.content_md = `# ${payload.title}\n\n${payload.content_md}`;
+    }
+
     return NextResponse.json(payload);
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
