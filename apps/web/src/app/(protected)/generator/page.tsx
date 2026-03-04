@@ -12,7 +12,9 @@ export default function GeneratorPage() {
   const [status, setStatus] = useState<string>("");
 
   const [kwState, setKwState] = useState<any>(null);
-
+  function exportDocxFromSavedId(postId: string) {
+  window.location.href = `/api/export-docx?id=${encodeURIComponent(postId)}`;
+}
   // Load latest keywords session saved by Keywords page
   useEffect(() => {
     try {
