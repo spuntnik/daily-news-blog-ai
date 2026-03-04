@@ -3,14 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
 
-type KeywordsV2 = {
-  topic: string;
-  audience?: string;
-  region?: string;
-  language?: string;
-  data?: any; // full API payload
-};
-
 export default function GeneratorPage() {
   const supabase = supabaseBrowser();
 
@@ -21,73 +13,20 @@ export default function GeneratorPage() {
 
   const [kwState, setKwState] = useState<any>(null);
 
+  // Load latest keywords session saved by Keywords page
   useEffect(() => {
-  try {
-    const raw = localStorage.getItem("agseo:keywords");
-    if (!raw) return;
-
-    const parsed = JSON.parse(raw);
-    setKwState(parsed);
-  } catch {
-    setKwState(null);
-  }
-}, []);
-
-    let found: any = null;
-
-    // 1) Try known keys first
-    for (const k of candidates) {
-      const raw = localStorage.getItem(k);
-      if (!raw) continue;
-
+    try {
+      const raw = localStorage.getItem("agseo:keywords");
+      if (!raw) {
+        setKwState(null);
+        return;
+      }
       const parsed = JSON.parse(raw);
-      // common shapes:
-      // A) { state: {...} }
-      // B) { value: {...} }
-      // C) { data: {...}, topic: ... }  (already the state)
-      // D) {...}                        (already the state)
-      const s = parsed?.state || parsed?.value || parsed;
-
-      // keywords page stores full payload in state.data
-      const payload = s?.data || s;
-      if (payload?.seo && payload?.geo && payload?.aeo) {
-        found = payload;
-        break;
-      }
+      setKwState(parsed);
+    } catch (e) {
+      setKwState(null);
     }
-
-    // 2) If not found, scan for anything that looks like keywords state
-    if (!found) {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key) continue;
-        if (!key.includes("keywords")) continue;
-
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-
-        let parsed: any;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          continue;
-        }
-
-        const s = parsed?.state || parsed?.value || parsed;
-        const payload = s?.data || s;
-
-        if (payload?.seo && payload?.geo && payload?.aeo) {
-          found = payload;
-          break;
-        }
-      }
-    }
-
-    setKwState(found);
-  } catch {
-    setKwState(null);
-  }
-}, []);
+  }, []);
 
   async function autoGenerate() {
     setStatus("Generating blog...");
@@ -138,7 +77,7 @@ export default function GeneratorPage() {
         content_md: contentMd,
         content_html: null,
         sources: {
-          keywords_source: "keywords-v2",
+          keywords_source: "agseo:keywords",
           topic: kwState?.topic || null,
           region: kwState?.region || null,
         },
@@ -158,21 +97,10 @@ export default function GeneratorPage() {
       <h1>Generator</h1>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-  <button onClick={autoGenerate}>Auto-generate from Keywords</button>
-  <button onClick={saveDraft}>Save draft to Library</button>
-  {status && <span style={{ opacity: 0.8 }}>{status}</span>}
-</div>
-
-<pre style={{ fontSize: 12, opacity: 0.7 }}>
-  {JSON.stringify(
-    { 
-      hasKw: !!kwState, 
-      keys: Object.keys(localStorage).filter(k => k.includes("keywords")) 
-    }, 
-    null, 
-    2
-  )}
-</pre>
+        <button onClick={autoGenerate}>Auto-generate from Keywords</button>
+        <button onClick={saveDraft}>Save draft to Library</button>
+        {status && <span style={{ opacity: 0.8 }}>{status}</span>}
+      </div>
 
       {!kwState?.topic && (
         <div style={{ marginBottom: 16, padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
@@ -205,7 +133,13 @@ export default function GeneratorPage() {
             value={contentMd}
             onChange={(e) => setContentMd(e.target.value)}
             rows={18}
-            style={{ width: "100%", padding: 10, marginTop: 6, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+              fontFamily:
+                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            }}
           />
         </label>
       </div>
