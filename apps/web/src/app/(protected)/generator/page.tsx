@@ -23,18 +23,73 @@ export default function GeneratorPage() {
 
   // Load keywords state saved by usePageState("/keywords-v2", ...)
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("page_state:/keywords-v2");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        // your hook likely stores { state: {...} } OR just the state; handle both
-        const s = parsed?.state || parsed;
-        setKwState(s?.data || null);
+  try {
+    const candidates = [
+      "page_state:/keywords-v2",
+      "page_state:/keywords",
+      "usePageState:/keywords-v2",
+      "usePageState:/keywords",
+      "pageState:/keywords-v2",
+      "pageState:/keywords",
+      "/keywords-v2",
+      "/keywords",
+    ];
+
+    let found: any = null;
+
+    // 1) Try known keys first
+    for (const k of candidates) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw);
+      // common shapes:
+      // A) { state: {...} }
+      // B) { value: {...} }
+      // C) { data: {...}, topic: ... }  (already the state)
+      // D) {...}                        (already the state)
+      const s = parsed?.state || parsed?.value || parsed;
+
+      // keywords page stores full payload in state.data
+      const payload = s?.data || s;
+      if (payload?.seo && payload?.geo && payload?.aeo) {
+        found = payload;
+        break;
       }
-    } catch {
-      // ignore
     }
-  }, []);
+
+    // 2) If not found, scan for anything that looks like keywords state
+    if (!found) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (!key.includes("keywords")) continue;
+
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          continue;
+        }
+
+        const s = parsed?.state || parsed?.value || parsed;
+        const payload = s?.data || s;
+
+        if (payload?.seo && payload?.geo && payload?.aeo) {
+          found = payload;
+          break;
+        }
+      }
+    }
+
+    setKwState(found);
+  } catch {
+    setKwState(null);
+  }
+}, []);
 
   async function autoGenerate() {
     setStatus("Generating blog...");
