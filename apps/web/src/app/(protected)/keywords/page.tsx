@@ -115,23 +115,27 @@ export default function KeywordsPage() {
         body: JSON.stringify({ topic, audience, region, language }),
       });
 
-      const json = await res.json();
-      
-// Save keywords session for Generator
-localStorage.setItem(
-  "agseo:keywords",
-  JSON.stringify({
-    topic,
-    audience,
-    region,
-    seo: json.seo,
-    geo: json.geo,
-    aeo: json.aeo
-  })
-);
-      const payload = json as ApiPayload;
+const json = await res.json();
+if (!res.ok) throw new Error(json?.error || "Request failed");
 
-      const nextRows: Row[] = [];
+// Save keywords session for Generator (only after success)
+if (typeof window !== "undefined" && json?.seo && json?.geo && json?.aeo) {
+  localStorage.setItem(
+    "agseo:keywords",
+    JSON.stringify({
+      topic,
+      audience,
+      region,
+      seo: json.seo,
+      geo: json.geo,
+      aeo: json.aeo,
+    })
+  );
+}
+
+const payload = json as ApiPayload;
+
+const nextRows: Row[] = [];
 
       // SEO
       for (const k of payload.seo.seed || []) nextRows.push({ bucket: "SEO", type: "seed", value: k });
