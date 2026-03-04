@@ -125,8 +125,11 @@ Primary keywords (use many, naturally): ${JSON.stringify(primaryKw)}
 Long-tail keywords (sprinkle naturally): ${JSON.stringify(longTailKw)}
 
 AEO questions for FAQ (answer 5–8): ${JSON.stringify(aeoQuestions)}
-`.trim();
 
+Variation hint (must meaningfully change the angle, examples, and structure while staying on-topic):
+${String(body.variation_hint || "").trim() || "none"}
+`.trim();
+    
     const schema = {
       name: "blog_post",
       strict: true,
