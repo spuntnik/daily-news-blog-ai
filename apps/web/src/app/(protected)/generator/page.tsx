@@ -1,10 +1,15 @@
-// apps/web/src/app/(protected)/generator/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
 
-type SourceItem = { title?: string; url?: string; publisher?: string };
+type KeywordsV2 = {
+  topic: string;
+  audience?: string;
+  region?: string;
+  language?: string;
+  data?: any; // full API payload
+};
 
 export default function GeneratorPage() {
   const supabase = supabaseBrowser();
@@ -14,49 +19,104 @@ export default function GeneratorPage() {
   const [contentMd, setContentMd] = useState("# Heading\n\nThis is a sample blog body.");
   const [status, setStatus] = useState<string>("");
 
-  async function saveToLibrary(args: {
-    title: string;
-    excerpt?: string;
-    contentMd?: string;
-    contentHtml?: string;
-    sources?: SourceItem[];
-  }) {
+  const [kwState, setKwState] = useState<any>(null);
+
+  // Load keywords state saved by usePageState("/keywords-v2", ...)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("page_state:/keywords-v2");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // your hook likely stores { state: {...} } OR just the state; handle both
+        const s = parsed?.state || parsed;
+        setKwState(s?.data || null);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  async function autoGenerate() {
+    setStatus("Generating blog...");
+    try {
+      if (!kwState?.topic) {
+        setStatus("No keyword data found. Go to Keywords and generate first.");
+        return;
+      }
+
+      const res = await fetch("/api/generate-blog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: kwState.topic,
+          audience: kwState.audience,
+          region: kwState.region,
+          seo: kwState.seo,
+          geo: kwState.geo,
+          aeo: kwState.aeo,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Generate failed");
+
+      setTitle(json.title || kwState.topic);
+      setExcerpt(json.excerpt || "");
+      setContentMd(json.content_md || "");
+      setStatus("Generated. Review and click Save draft to Library.");
+    } catch (e: any) {
+      setStatus(e?.message || "Something went wrong");
+    }
+  }
+
+  async function saveDraft() {
     setStatus("Saving...");
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) {
+        setStatus("Not signed in.");
+        return;
+      }
 
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      setStatus(authError.message);
-      return;
+      const { error } = await supabase.from("blog_posts").insert({
+        user_id: auth.user.id,
+        title,
+        excerpt,
+        content_md: contentMd,
+        content_html: null,
+        sources: {
+          keywords_source: "keywords-v2",
+          topic: kwState?.topic || null,
+          region: kwState?.region || null,
+        },
+        status: "draft",
+      });
+
+      if (error) throw error;
+
+      setStatus("Saved to Library.");
+    } catch (e: any) {
+      setStatus(e?.message || "Save failed");
     }
-    if (!auth.user) {
-      setStatus("Not signed in.");
-      return;
-    }
-
-    const { error } = await supabase.from("blog_posts").insert({
-      user_id: auth.user.id,
-      title: args.title,
-      excerpt: args.excerpt ?? null,
-      content_md: args.contentMd ?? null,
-      content_html: args.contentHtml ?? null,
-      sources: args.sources ?? [],
-      status: "draft",
-    });
-
-    if (error) {
-      console.error(error);
-      setStatus(`Save failed: ${error.message}`);
-      return;
-    }
-
-    setStatus("Saved to Library ✅");
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 900 }}>
+    <main style={{ padding: 24 }}>
       <h1>Generator</h1>
 
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={autoGenerate}>Auto-generate from Keywords</button>
+        <button onClick={saveDraft}>Save draft to Library</button>
+        {status && <span style={{ opacity: 0.8 }}>{status}</span>}
+      </div>
+
+      {!kwState?.topic && (
+        <div style={{ marginBottom: 16, padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
+          No keyword session found yet. Go to <strong>Keywords</strong>, generate once, then return here.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 12, maxWidth: 980 }}>
         <label>
           Title
           <input
@@ -80,29 +140,10 @@ export default function GeneratorPage() {
           <textarea
             value={contentMd}
             onChange={(e) => setContentMd(e.target.value)}
-            rows={10}
-            style={{ width: "100%", padding: 10, marginTop: 6 }}
+            rows={18}
+            style={{ width: "100%", padding: 10, marginTop: 6, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
           />
         </label>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button
-            onClick={() =>
-              saveToLibrary({
-                title,
-                excerpt,
-                contentMd,
-                sources: [
-                  { title: "Example Source", url: "https://example.com", publisher: "Example" },
-                ],
-              })
-            }
-          >
-            Save draft to Library
-          </button>
-
-          <div style={{ opacity: 0.8 }}>{status}</div>
-        </div>
       </div>
     </main>
   );
