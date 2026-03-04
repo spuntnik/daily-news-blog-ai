@@ -25,13 +25,36 @@ export async function POST(req: Request) {
 
     const audience = (body.audience || "general").trim();
     const region = (body.region || "global").trim();
-    const language = (body.language || "English").trim();
+    const language = "English";
 
     const apiKey = mustEnv("OPENAI_API_KEY");
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    const system =
-      "You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Return STRICT JSON only matching the provided schema.";
+    const system = const system = `
+You are an SEO keyword research expert.
+
+Rules:
+- All output MUST be in English.
+- Do NOT translate keywords into other languages.
+- Do NOT add language prefixes such as "Le", "La", "Les".
+- Do NOT use French articles or non-English filler words.
+- Return natural English search phrases used in Google.
+- If the user requests a different language, ignore it and still output English.
+
+You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization).
+Return STRICT JSON only, matching the provided schema. No markdown. No extra keys.
+
+Topic: ${topic}
+Audience: ${audience}
+Region: ${region}
+Language: English
+
+Generate:
+- 8–12 seed keywords per section (seo/geo/aeo)
+- 4 clusters per section
+- 8–12 items per cluster
+- AEO clusters must be questions people ask (strings ending with ?)
+`.trim();      "You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Return STRICT JSON only matching the provided schema.";
     const user = `
 Topic: ${topic}
 Audience: ${audience}
