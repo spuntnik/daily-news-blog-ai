@@ -116,8 +116,19 @@ export default function KeywordsPage() {
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Request failed");
-
+      
+// Save keywords session for Generator
+localStorage.setItem(
+  "agseo:keywords",
+  JSON.stringify({
+    topic,
+    audience,
+    region,
+    seo: json.seo,
+    geo: json.geo,
+    aeo: json.aeo
+  })
+);
       const payload = json as ApiPayload;
 
       const nextRows: Row[] = [];
