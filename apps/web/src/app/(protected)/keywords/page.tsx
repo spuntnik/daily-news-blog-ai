@@ -132,7 +132,8 @@ if (typeof window !== "undefined" && json?.seo && json?.geo && json?.aeo) {
     })
   );
 }
-
+console.log("Saved agseo:keywords bytes:", localStorage.getItem("agseo:keywords")?.length);
+      
 const payload = json as ApiPayload;
 
 const nextRows: Row[] = [];
