@@ -102,6 +102,19 @@ export default function GeneratorPage() {
         {status && <span style={{ opacity: 0.8 }}>{status}</span>}
       </div>
 
+      <pre style={{ fontSize: 12, opacity: 0.7 }}>
+  {JSON.stringify(
+    {
+      hasKwState: !!kwState,
+      topic: kwState?.topic || null,
+      savedAt: kwState?._savedAt || null,
+      bytes: typeof window !== "undefined" ? localStorage.getItem("agseo:keywords")?.length : null,
+    },
+    null,
+    2
+  )}
+</pre>
+      
       {!kwState?.topic && (
         <div style={{ marginBottom: 16, padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
           No keyword session found yet. Go to <strong>Keywords</strong>, generate once, then return here.
