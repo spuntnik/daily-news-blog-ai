@@ -21,19 +21,17 @@ export default function GeneratorPage() {
 
   const [kwState, setKwState] = useState<any>(null);
 
-  // Load keywords state saved by usePageState("/keywords-v2", ...)
   useEffect(() => {
   try {
-    const candidates = [
-      "page_state:/keywords-v2",
-      "page_state:/keywords",
-      "usePageState:/keywords-v2",
-      "usePageState:/keywords",
-      "pageState:/keywords-v2",
-      "pageState:/keywords",
-      "/keywords-v2",
-      "/keywords",
-    ];
+    const raw = localStorage.getItem("agseo:keywords");
+    if (!raw) return;
+
+    const parsed = JSON.parse(raw);
+    setKwState(parsed);
+  } catch {
+    setKwState(null);
+  }
+}, []);
 
     let found: any = null;
 
