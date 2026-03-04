@@ -22,7 +22,8 @@ export async function POST(req: Request) {
 
     const topic = (body.topic || "").trim();
     if (!topic) return NextResponse.json({ error: "Missing topic" }, { status: 400 });
-
+    response_format: { type: "json_schema", json_schema: schema }
+    
     const audience = (body.audience || "general").trim();
     const region = (body.region || "global").trim();
     const language = "English";
@@ -52,17 +53,24 @@ Generate for Topic, Audience, Region:
 - AEO: 8 primary topics + 20 question long-tail + 4 clusters (8–12 questions each)
 `.trim();
 
+const user = `
 Topic: ${topic}
 Audience: ${audience}
 Region: ${region}
 Language: English
+
+Return JSON matching the schema.
+`.trim();
 
 Generate:
 - 8–12 seed keywords per section (seo/geo/aeo)
 - 4 clusters per section
 - 8–12 items per cluster
 - AEO clusters must be questions people ask (strings ending with ?)
-`.trim();      "You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Return STRICT JSON only matching the provided schema.";
+`.trim();      
+
+"You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization). Return STRICT JSON only matching the provided schema.";
+    
     const user = `
 Topic: ${topic}
 Audience: ${audience}
@@ -77,83 +85,89 @@ Generate:
 `.trim();
 
     const schema = {
-      name: "keyword_clusters",
-      schema: {
+  name: "keyword_clusters_v2",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["topic", "seo", "geo", "aeo"],
+    properties: {
+      topic: { type: "string" },
+
+      seo: {
         type: "object",
         additionalProperties: false,
-        required: ["topic", "seo", "geo", "aeo"],
+        required: ["primary_keywords", "long_tail_keywords", "clusters"],
         properties: {
-          topic: { type: "string" },
-          seo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "keywords"],
-                  properties: {
-                    name: { type: "string" },
-                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
-              },
-            },
-          },
-          geo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "keywords"],
-                  properties: {
-                    name: { type: "string" },
-                    keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
-              },
-            },
-          },
-          aeo: {
-            type: "object",
-            additionalProperties: false,
-            required: ["seed", "clusters"],
-            properties: {
-              seed: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-              clusters: {
-                type: "array",
-                minItems: 4,
-                maxItems: 4,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "questions"],
-                  properties: {
-                    name: { type: "string" },
-                    questions: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
-                  },
-                },
+          primary_keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 20 },
+          long_tail_keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 24 },
+          clusters: {
+            type: "array",
+            minItems: 4,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "keywords"],
+              properties: {
+                name: { type: "string" },
+                keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
               },
             },
           },
         },
       },
-      strict: true,
-    } as const;
+
+      geo: {
+        type: "object",
+        additionalProperties: false,
+        required: ["primary_keywords", "long_tail_keywords", "clusters"],
+        properties: {
+          primary_keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 20 },
+          long_tail_keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 24 },
+          clusters: {
+            type: "array",
+            minItems: 4,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "keywords"],
+              properties: {
+                name: { type: "string" },
+                keywords: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              },
+            },
+          },
+        },
+      },
+
+      aeo: {
+        type: "object",
+        additionalProperties: false,
+        required: ["primary_topics", "long_tail_questions", "clusters"],
+        properties: {
+          primary_topics: { type: "array", items: { type: "string" }, minItems: 6, maxItems: 12 },
+          long_tail_questions: { type: "array", items: { type: "string" }, minItems: 12, maxItems: 30 },
+          clusters: {
+            type: "array",
+            minItems: 4,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "questions"],
+              properties: {
+                name: { type: "string" },
+                questions: { type: "array", items: { type: "string" }, minItems: 8, maxItems: 12 },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  strict: true,
+} as const;
 
     // IMPORTANT: "response_format: json_schema" is supported on the Chat Completions API
     // for compatible models (including gpt-4o-mini in your allowed list).
