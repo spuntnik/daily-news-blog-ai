@@ -30,19 +30,27 @@ export async function POST(req: Request) {
     const apiKey = mustEnv("OPENAI_API_KEY");
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-    const system = const system = `
+const system = `
 You are an SEO keyword research expert.
 
 Rules:
 - All output MUST be in English.
 - Do NOT translate keywords into other languages.
 - Do NOT add language prefixes such as "Le", "La", "Les".
-- Do NOT use French articles or non-English filler words.
 - Return natural English search phrases used in Google.
-- If the user requests a different language, ignore it and still output English.
+- Output must match the provided JSON schema exactly. No extra keys. No markdown.
 
-You generate keyword clusters for SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization).
-Return STRICT JSON only, matching the provided schema. No markdown. No extra keys.
+Definitions:
+- primary_keywords: short, high-intent phrases (2–4 words max).
+- long_tail_keywords: longer, specific phrases (6–12 words) with clear intent (how/what/best/for/near/price/etc).
+- GEO keywords must include location intent (e.g. Singapore, Malaysia) where relevant.
+- AEO long_tail_keywords must be QUESTIONS ending with '?'.
+
+Generate for Topic, Audience, Region:
+- SEO: 12 primary + 12 long-tail + 4 clusters (8–12 keywords each)
+- GEO: 12 primary + 12 long-tail + 4 clusters (8–12 keywords each)
+- AEO: 8 primary topics + 20 question long-tail + 4 clusters (8–12 questions each)
+`.trim();
 
 Topic: ${topic}
 Audience: ${audience}
