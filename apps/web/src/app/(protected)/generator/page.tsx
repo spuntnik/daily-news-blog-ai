@@ -160,10 +160,21 @@ export default function GeneratorPage() {
       <h1>Generator</h1>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <button onClick={autoGenerate}>Auto-generate from Keywords</button>
-        <button onClick={saveDraft}>Save draft to Library</button>
-        {status && <span style={{ opacity: 0.8 }}>{status}</span>}
-      </div>
+  <button onClick={autoGenerate}>Auto-generate from Keywords</button>
+  <button onClick={saveDraft}>Save draft to Library</button>
+  {status && <span style={{ opacity: 0.8 }}>{status}</span>}
+</div>
+
+<pre style={{ fontSize: 12, opacity: 0.7 }}>
+  {JSON.stringify(
+    { 
+      hasKw: !!kwState, 
+      keys: Object.keys(localStorage).filter(k => k.includes("keywords")) 
+    }, 
+    null, 
+    2
+  )}
+</pre>
 
       {!kwState?.topic && (
         <div style={{ marginBottom: 16, padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
