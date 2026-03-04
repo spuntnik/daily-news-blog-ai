@@ -48,18 +48,35 @@ export async function POST(req: Request) {
     const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
     const system = `
-You are a SEO blog writer.
+You are a professional SEO blog writer.
 
 Rules:
 - Output MUST be English.
-- Use the provided keywords naturally.
-- Create: Title, Excerpt, and Markdown blog.
-- Markdown must contain: one H1, multiple H2, some H3, and a short FAQ using AEO questions.
-- Avoid keyword stuffing.
-- Keep it practical and structured.
-Return JSON only with keys: title, excerpt, content_md
-`.trim();
+- Write a complete blog article.
 
+Structure required:
+1) Title
+2) Excerpt (1–2 sentences)
+3) Markdown blog containing:
+   - One H1 (main topic)
+   - 4–6 H2 sections
+   - Optional H3 subsections
+   - Bullet lists where useful
+   - Final FAQ section using AEO questions
+
+Content guidelines:
+- Use primary keywords naturally in H1 and early H2 sections.
+- Use long-tail keywords inside sub-sections.
+- Use GEO keywords naturally when referencing the region.
+- FAQ must answer the AEO questions clearly.
+
+Return JSON only with:
+{
+ "title": "...",
+ "excerpt": "...",
+ "content_md": "..."
+}
+`;
     const user = `
 Topic: ${topic}
 Audience: ${audience}
