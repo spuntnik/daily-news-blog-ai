@@ -118,7 +118,32 @@ export default function KeywordsPage() {
 const json = await res.json();
 if (!res.ok) throw new Error(json?.error || "Request failed");
 
-// Save keywords session for Generator (only after success)
+// Force-save keyword session for Generator (robust)
+try {
+  const session = {
+    topic,
+    audience,
+    region,
+    language,
+    seo: json?.seo ?? null,
+    geo: json?.geo ?? null,
+    aeo: json?.aeo ?? null,
+    _savedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem("agseo:keywords", JSON.stringify(session));
+
+  console.log("agseo:keywords saved", {
+    bytes: localStorage.getItem("agseo:keywords")?.length,
+    savedAt: session._savedAt,
+    hasSeo: !!session.seo,
+    hasGeo: !!session.geo,
+    hasAeo: !!session.aeo,
+  });
+  
+} catch (e) {
+  console.log("agseo:keywords save FAILED", e);
+}// Save keywords session for Generator (only after success)
 if (typeof window !== "undefined" && json?.seo && json?.geo && json?.aeo) {
   localStorage.setItem(
     "agseo:keywords",
