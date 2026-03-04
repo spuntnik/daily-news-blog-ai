@@ -31,7 +31,7 @@ export default function KeywordsPage() {
   const searchParams = useSearchParams();
   const didAutoRun = useRef(false);
 
-  const { state, setState, loaded } = usePageState("/keywords", {
+  const { state, setState, loaded } = usePageState("/keywords-v2", {
     topic: "",
     audience: "content creators and agencies",
     region: "Singapore",
