@@ -1,137 +1,224 @@
-// apps/web/src/app/(protected)/library/page.tsx
+// app/library/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { supabaseBrowser } from "../../../utils/supabase/browser";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  DragEndEvent,
+} from "@dnd-kit/core";
 
-type PostRow = {
+type Stage = "Draft" | "Review" | "Scheduled" | "Published" | "Archived";
+
+type Post = {
   id: string;
   title: string;
-  created_at: string;
+  keyword: string | null;
+  angle: string | null;
+  hook_style: string | null;
+  pipeline_stage: Stage;
   status: string;
-  sources: any;
+  created_at: string;
+  updated_at: string | null;
 };
 
-const PIPELINE = ["draft", "review", "scheduled", "published"] as const;
+const STAGES: Stage[] = ["Draft", "Review", "Scheduled", "Published"];
 
 export default function LibraryPage() {
-  const supabase = supabaseBrowser();
-  const [posts, setPosts] = useState<PostRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string>("");
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Step 4: sensors for drag
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
   async function load() {
     setLoading(true);
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth.user) return;
-
-      const { data, error } = await supabase
-        .from("blog_posts")
-        .select("id,title,created_at,status,sources")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setPosts((data as any) || []);
-    } finally {
+    setErr("");
+    const res = await fetch("/api/library/list", { cache: "no-store" });
+    const json = await res.json();
+    if (!json.ok) {
+      setErr(json.error || "Failed to load");
       setLoading(false);
+      return;
     }
+    setPosts(json.posts);
+    setLoading(false);
   }
+
+  useEffect(() => {
+    load();
+  }, []);
 
   const grouped = useMemo(() => {
-    const buckets: Record<string, PostRow[]> = {};
-    for (const s of PIPELINE) buckets[s] = [];
-    buckets["other"] = [];
-
+    const map: Record<string, Post[]> = {};
+    for (const s of STAGES) map[s] = [];
     for (const p of posts) {
-      const st = (p.status || "draft").toLowerCase();
-      if (buckets[st]) buckets[st].push(p);
-      else buckets["other"].push(p);
+      if (map[p.pipeline_stage]) map[p.pipeline_stage].push(p);
     }
-    return buckets;
+    return map;
   }, [posts]);
 
-  function exportDocx(id: string) {
-    window.location.href = `/api/export-docx?id=${encodeURIComponent(id)}`;
+  async function move(id: string, next: Stage) {
+    // optimistic UI
+    setPosts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, pipeline_stage: next } : p))
+    );
+
+    const res = await fetch("/api/library/update-stage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, pipeline_stage: next }),
+    });
+    const json = await res.json();
+    if (!json.ok) {
+      await load();
+      alert(json.error || "Update failed");
+    }
   }
 
-  function statusLabel(s: string) {
-    const t = (s || "draft").toLowerCase();
-    if (t === "draft") return "Draft";
-    if (t === "review") return "Review";
-    if (t === "scheduled") return "Scheduled";
-    if (t === "published") return "Published";
-    return "Other";
+  function stageFromPostId(id: string): Stage | null {
+    const p = posts.find((x) => x.id === id);
+    return p?.pipeline_stage ?? null;
   }
+
+  // Step 5: handle drag end -> infer stage and update via existing API
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    const fromStage = stageFromPostId(activeId);
+    if (!fromStage) return;
+
+    let toStage: Stage | null = null;
+
+    // If dropped onto a column (we set column ids = stage names)
+    if (STAGES.includes(overId as Stage)) {
+      toStage = overId as Stage;
+    } else {
+      // If dropped onto another card, use that card's stage
+      const overStage = stageFromPostId(overId);
+      if (overStage) toStage = overStage;
+    }
+
+    if (!toStage || toStage === fromStage) return;
+
+    await move(activeId, toStage);
+  }
+
+  if (loading) return <main style={{ padding: 24 }}>Loading…</main>;
+  if (err) return <main style={{ padding: 24 }}>Error: {err}</main>;
 
   return (
-    <div>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-        <h1>Library</h1>
-        <button onClick={load} disabled={loading}>
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
-      </div>
+    <main style={{ padding: 24 }}>
+      {/* Step 3: wrap the whole board with DndContext */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            alignItems: "flex-start",
+            overflowX: "auto",
+          }}
+        >
+          {STAGES.map((stage) => (
+            // IMPORTANT: id={stage} makes the column a drop target by id inference
+            <section
+              key={stage}
+              id={stage}
+              style={{
+                minWidth: 320,
+                border: "1px solid #222",
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                }}
+              >
+                <strong>{stage}</strong>
+                <span>{grouped[stage]?.length ?? 0}</span>
+              </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-        {PIPELINE.map((col) => (
-          <div key={col} style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontWeight: 700 }}>{statusLabel(col)}</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>{grouped[col].length}</div>
-            </div>
-
-            <div style={{ display: "grid", gap: 10 }}>
-              {grouped[col].map((p) => (
-                <Link key={p.id} href={`/library/${p.id}`} style={{ textDecoration: "none" }}>
-                  <div
+              <div style={{ display: "grid", gap: 10 }}>
+                {grouped[stage].map((p) => (
+                  // IMPORTANT: id={p.id} allows dropping onto another card to infer stage
+                  <article
+                    key={p.id}
+                    id={p.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", p.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     style={{
-                      border: "1px solid #ddd",
+                      border: "1px solid #333",
                       borderRadius: 12,
                       padding: 12,
-                      cursor: "pointer",
-                      background: "#111",
-                      color: "white",
+                      cursor: "grab",
                     }}
                   >
-                    <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>
                       {p.title}
                     </div>
-
-                    <div style={{ opacity: 0.75, marginTop: 6, fontSize: 12 }}>
-                      {new Date(p.created_at).toLocaleDateString()} · {(p?.sources ? 1 : 0)} source bundle
+                    <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
+                      {p.keyword ? `Keyword: ${p.keyword}` : "Keyword: —"}
+                      {p.angle ? ` • ${p.angle}` : ""}
+                      {p.hook_style ? ` • ${p.hook_style}` : ""}
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          exportDocx(p.id);
-                        }}
-                        style={{ fontSize: 12, padding: "6px 8px", cursor: "pointer" }}
-                      >
-                        Export .docx
-                      </button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {stage !== "Draft" && (
+                        <button onClick={() => move(p.id, "Draft")}>← Draft</button>
+                      )}
+                      {stage === "Draft" && (
+                        <button onClick={() => move(p.id, "Review")}>
+                          To Review →
+                        </button>
+                      )}
+                      {stage === "Review" && (
+                        <>
+                          <button onClick={() => move(p.id, "Draft")}>← Back</button>
+                          <button onClick={() => move(p.id, "Scheduled")}>
+                            Schedule →
+                          </button>
+                        </>
+                      )}
+                      {stage === "Scheduled" && (
+                        <>
+                          <button onClick={() => move(p.id, "Review")}>← Back</button>
+                          <button onClick={() => move(p.id, "Published")}>
+                            Publish →
+                          </button>
+                        </>
+                      )}
+                      {stage === "Published" && (
+                        <button onClick={() => move(p.id, "Scheduled")}>← Back</button>
+                      )}
                     </div>
-                  </div>
-                </Link>
-              ))}
-
-              {grouped[col].length === 0 && (
-                <div style={{ fontSize: 12, opacity: 0.65 }}>
-                  No items yet.
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </DndContext>
+    </main>
   );
 }
