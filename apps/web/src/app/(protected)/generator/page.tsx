@@ -1,4 +1,5 @@
 // apps/web/src/app/(protected)/generator/page.tsx
+// apps/web/src/app/(protected)/generator/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -140,14 +141,15 @@ export default function GeneratorPage() {
           savedAt: kwState?._savedAt || null,
           mode,
           profile: mode === "addon-beta" ? profile : null,
-          addon: mode === "addon-beta"
-            ? {
-                seoTitle: addonResult?.seoTitle || "",
-                metaDescription: addonResult?.metaDescription || "",
-                faqs: addonResult?.faqs || [],
-                cta: addonResult?.cta || "",
-              }
-            : null,
+          addon:
+            mode === "addon-beta"
+              ? {
+                  seoTitle: addonResult?.seoTitle || "",
+                  metaDescription: addonResult?.metaDescription || "",
+                  faqs: addonResult?.faqs || [],
+                  cta: addonResult?.cta || "",
+                }
+              : null,
         },
         status: "draft",
       })
@@ -181,7 +183,9 @@ export default function GeneratorPage() {
       setContentMd(d.content_md);
 
       if (mode === "addon-beta") {
-        setStatus("Generated add-on content. Review, then Save draft to Library.");
+        setStatus("Generated add-on content. Saving to Library...");
+        const id = await saveDraftToLibrary(d);
+        setStatus(id ? "Generated and auto-saved to Library." : "Generated and auto-saved to Library.");
       } else {
         setStatus("Generated. Review, then Save draft to Library.");
       }
