@@ -1,4 +1,5 @@
 // apps/web/src/app/api/generate-blog/route.ts
+import { NextResponse } from "next/server";
 import { buildGeneratorPrompt } from "../../../lib/addon/promptBuilders";
 import type {
   AddonRequest,
