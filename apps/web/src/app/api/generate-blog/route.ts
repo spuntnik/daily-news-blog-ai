@@ -1,11 +1,10 @@
 // apps/web/src/app/api/generate-blog/route.ts
-import { NextResponse } from "next/server";
-import { buildGeneratorPrompt } from "@/lib/addon/promptBuilders";
+import { buildGeneratorPrompt } from "../../../lib/addon/promptBuilders";
 import type {
   AddonRequest,
   GeneratorMode,
   AddonProfile,
-} from "@/lib/addon/types";
+} from "../../../lib/addon/types";
 
 export const runtime = "nodejs";
 
