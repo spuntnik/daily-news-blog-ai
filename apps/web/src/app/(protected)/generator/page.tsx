@@ -1,5 +1,4 @@
 // apps/web/src/app/(protected)/generator/page.tsx
-// apps/web/src/app/(protected)/generator/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +7,7 @@ import type { AddonProfile, GeneratorMode } from "../../../lib/addon/types";
 
 type KwState = {
   topic?: string;
+  selectedTopic?: string;
   audience?: string;
   region?: string;
   seo?: any;
@@ -35,6 +35,7 @@ export default function GeneratorPage() {
   const supabase = supabaseBrowser();
 
   const [kwState, setKwState] = useState<KwState | null>(null);
+  const [topicInput, setTopicInput] = useState("");
 
   const [mode, setMode] = useState<GeneratorMode>("standard");
   const [profile, setProfile] = useState<AddonProfile>("strategic-article");
@@ -56,22 +57,26 @@ export default function GeneratorPage() {
       const raw = localStorage.getItem("agseo:keywords");
       if (!raw) {
         setKwState(null);
+        setTopicInput("");
         return;
       }
+
       const parsed = JSON.parse(raw);
       setKwState(parsed);
+      setTopicInput(parsed.selectedTopic || parsed.topic || "");
     } catch {
       setKwState(null);
+      setTopicInput("");
     }
   }, []);
 
   function canGenerate() {
-    return !!kwState?.topic && !!kwState?.seo && !!kwState?.geo && !!kwState?.aeo;
+    return !!topicInput && !!kwState?.seo && !!kwState?.geo && !!kwState?.aeo;
   }
 
   async function generateOne(variation_hint?: string): Promise<Generated> {
-    if (!kwState?.topic) {
-      throw new Error("No keyword data found. Go to Keywords and generate first.");
+    if (!topicInput) {
+      throw new Error("No topic found. Go to Site or Keywords and select a topic first.");
     }
 
     const res = await fetch("/api/generate-blog", {
@@ -80,12 +85,12 @@ export default function GeneratorPage() {
       body: JSON.stringify({
         mode,
         profile,
-        topic: kwState.topic,
-        audience: kwState.audience,
-        region: kwState.region,
-        seo: kwState.seo,
-        geo: kwState.geo,
-        aeo: kwState.aeo,
+        topic: topicInput,
+        audience: kwState?.audience,
+        region: kwState?.region,
+        seo: kwState?.seo,
+        geo: kwState?.geo,
+        aeo: kwState?.aeo,
         variation_hint: variation_hint || "",
       }),
     });
@@ -95,7 +100,7 @@ export default function GeneratorPage() {
 
     if (mode === "addon-beta") {
       const addonPayload: AddonGenerated = {
-        blogTitle: json.blogTitle || kwState.topic,
+        blogTitle: json.blogTitle || topicInput,
         seoTitle: json.seoTitle || "",
         metaDescription: json.metaDescription || "",
         blogHtml: json.blogHtml || "",
@@ -116,7 +121,7 @@ export default function GeneratorPage() {
     setAddonResult(null);
 
     return {
-      title: json.title || kwState.topic,
+      title: json.title || topicInput,
       excerpt: json.excerpt || "",
       content_md: json.content_md || "",
     };
@@ -136,7 +141,7 @@ export default function GeneratorPage() {
         content_html: mode === "addon-beta" ? addonResult?.blogHtml || null : null,
         sources: {
           keywords_source: "agseo:keywords",
-          topic: kwState?.topic || null,
+          topic: topicInput || null,
           region: kwState?.region || null,
           savedAt: kwState?._savedAt || null,
           mode,
@@ -172,7 +177,7 @@ export default function GeneratorPage() {
 
     try {
       if (!canGenerate()) {
-        setStatus("No keyword data found. Go to Keywords and generate first.");
+        setStatus("No topic or keyword session found. Go to Site or Keywords first.");
         return;
       }
 
@@ -228,7 +233,7 @@ export default function GeneratorPage() {
 
     try {
       if (!canGenerate()) {
-        setStatus("No keyword data found. Go to Keywords and generate first.");
+        setStatus("No topic or keyword session found. Go to Site or Keywords first.");
         return;
       }
 
@@ -316,6 +321,18 @@ export default function GeneratorPage() {
         </div>
       )}
 
+      <div style={{ display: "grid", gap: 12, maxWidth: 980, marginBottom: 16 }}>
+        <label>
+          Selected Topic
+          <input
+            value={topicInput}
+            onChange={(e) => setTopicInput(e.target.value)}
+            placeholder="Choose a topic from Site, or type one here"
+            style={{ width: "100%", padding: 10, marginTop: 6 }}
+          />
+        </label>
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -353,7 +370,7 @@ export default function GeneratorPage() {
             borderRadius: 10,
           }}
         >
-          No keyword session found yet. Go to <strong>Keywords</strong>, generate once, then return here.
+          No topic or keyword session found yet. Go to <strong>Site</strong> or <strong>Keywords</strong> first.
         </div>
       )}
 
