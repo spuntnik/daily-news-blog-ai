@@ -1,29 +1,17 @@
-// apps/web/src/app/(protected)/trends/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type TrendCard = {
-  id: string;
-  title: string;
-  whyItMatters: string;
-  suggestedAngle: string;
-  audience: string;
-  region: string;
-  sourceTopic: string;
-  confidence: "low" | "medium" | "high";
-};
-
-type TrendsResponse = {
-  ok?: boolean;
-  trends?: TrendCard[];
-  profileSummary?: {
-    industry: string;
-    audiences: string[];
-    markets: string[];
-  };
-  error?: string;
+type Profile = {
+  siteUrl: string;
+  industry: string;
+  audiences: string[];
+  markets: string[];
+  topics: string[];
+  competitors: { name: string; url: string; confidence: "low" | "medium" | "high"; note: string }[];
+  needsClarification: boolean;
+  suggestedPromptQuestions: string[];
 };
 
 type StoredKwState = {
@@ -37,10 +25,84 @@ type StoredKwState = {
   _savedAt?: string;
 };
 
+type TrendCard = {
+  id: string;
+  title: string;
+  whyItMatters: string;
+  suggestedAngle: string;
+  audience: string;
+  region: string;
+  sourceTopic: string;
+  confidence: "low" | "medium" | "high";
+};
+
+function uniq(arr: string[]) {
+  return Array.from(new Set(arr.map((x) => (x || "").trim()).filter(Boolean)));
+}
+
+function slugify(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+}
+
 function confidenceColor(confidence: TrendCard["confidence"]) {
   if (confidence === "high") return "#166534";
   if (confidence === "medium") return "#a16207";
   return "#6b7280";
+}
+
+function buildTrendCards(profile: Profile, selectedTopic?: string): TrendCard[] {
+  const industry = profile.industry || "Business";
+  const audiences = uniq(profile.audiences || []);
+  const markets = uniq(profile.markets || []);
+  const topics = uniq([
+    ...(selectedTopic ? [selectedTopic] : []),
+    ...(profile.topics || []),
+  ]).slice(0, 12);
+
+  const region = markets[0] || "Global";
+  const fallbackAudience = audiences[0] || "Professionals";
+
+  const angleTemplates = [
+    "practical playbook",
+    "common mistakes and fixes",
+    "executive briefing",
+    "step-by-step guide",
+    "strategy framework",
+    "what leaders are missing",
+    "FAQ-led explainer",
+    "how to apply this now",
+  ];
+
+  const whyTemplates = [
+    `This aligns with ${industry.toLowerCase()} demand and current audience needs.`,
+    `This is highly relevant for ${fallbackAudience.toLowerCase()} facing fast-changing priorities.`,
+    `This topic supports authority-building and search intent across ${region}.`,
+    `This creates a strong bridge between strategic interest and publishable content.`,
+  ];
+
+  return topics.map((topic, i) => {
+    const audience = audiences[i % Math.max(audiences.length, 1)] || fallbackAudience;
+    const angle = angleTemplates[i % angleTemplates.length];
+    const why = whyTemplates[i % whyTemplates.length];
+    const confidence: "low" | "medium" | "high" =
+      i < 4 ? "high" : i < 8 ? "medium" : "low";
+
+    return {
+      id: slugify(`${topic}-${audience}-${region}-${i}`),
+      title: topic,
+      whyItMatters: why,
+      suggestedAngle: `${topic}: ${angle}`,
+      audience,
+      region,
+      sourceTopic: topic,
+      confidence,
+    };
+  });
 }
 
 export default function TrendsPage() {
@@ -50,45 +112,47 @@ export default function TrendsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [trends, setTrends] = useState<TrendCard[]>([]);
-  const [profileSummary, setProfileSummary] = useState<TrendsResponse["profileSummary"] | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [selectedTopicHint, setSelectedTopicHint] = useState("");
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("agseo:keywords");
-      if (raw) {
-        const parsed = JSON.parse(raw) as StoredKwState;
-        setSelectedTopicHint(parsed.selectedTopic || parsed.topic || "");
-      }
-    } catch {
-      // ignore
-    }
+    loadTrends();
   }, []);
 
-  useEffect(() => {
-    loadTrends();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTopicHint]);
-
-  async function loadTrends() {
+  function loadTrends() {
     setLoading(true);
     setError("");
 
     try {
-      const qs = selectedTopicHint
-        ? `?selectedTopic=${encodeURIComponent(selectedTopicHint)}`
-        : "";
+      let localProfile: Profile | null = null;
+      let kwState: StoredKwState = {};
 
-      const res = await fetch(`/api/trends${qs}`, { cache: "no-store" });
-      const json: TrendsResponse = await res.json();
+      const rawProfile = localStorage.getItem("agseo:siteProfile");
+      if (rawProfile) {
+        localProfile = JSON.parse(rawProfile) as Profile;
+      }
 
-      if (!res.ok) throw new Error(json?.error || "Failed to load trends");
+      const rawKw = localStorage.getItem("agseo:keywords");
+      if (rawKw) {
+        kwState = JSON.parse(rawKw) as StoredKwState;
+      }
 
-      setTrends(json.trends || []);
-      setProfileSummary(json.profileSummary || null);
+      const selected = kwState.selectedTopic || kwState.topic || "";
+      setSelectedTopicHint(selected);
+
+      if (!localProfile) {
+        setError("No site profile found. Go to Site Setup, click Analyze site, then return here.");
+        setTrends([]);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(localProfile);
+      setTrends(buildTrendCards(localProfile, selected));
     } catch (e: any) {
       setError(e?.message || "Failed to load trends");
       setTrends([]);
+      setProfile(null);
     } finally {
       setLoading(false);
     }
@@ -96,7 +160,7 @@ export default function TrendsPage() {
 
   async function refreshNow() {
     setRefreshing(true);
-    await loadTrends();
+    loadTrends();
     setRefreshing(false);
   }
 
@@ -146,7 +210,7 @@ export default function TrendsPage() {
         </div>
       </div>
 
-      {profileSummary ? (
+      {profile ? (
         <div
           style={{
             marginBottom: 18,
@@ -158,13 +222,13 @@ export default function TrendsPage() {
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Profile Summary</div>
           <div style={{ fontSize: 14, opacity: 0.9 }}>
-            <strong>Industry:</strong> {profileSummary.industry || "—"}
+            <strong>Industry:</strong> {profile.industry || "—"}
           </div>
           <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>
-            <strong>Audiences:</strong> {(profileSummary.audiences || []).join(", ") || "—"}
+            <strong>Audiences:</strong> {(profile.audiences || []).join(", ") || "—"}
           </div>
           <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>
-            <strong>Markets:</strong> {(profileSummary.markets || []).join(", ") || "—"}
+            <strong>Markets:</strong> {(profile.markets || []).join(", ") || "—"}
           </div>
           {selectedTopicHint ? (
             <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
