@@ -43,10 +43,18 @@ export default function SitePage() {
         const data = await res.json();
         if (res.ok) {
           if (data?.siteUrl) setSiteUrl(data.siteUrl);
-          if (data?.profile) setProfile(data.profile);
+          if (data?.profile) {
+            setProfile(data.profile);
+            localStorage.setItem("agseo:siteProfile", JSON.stringify(data.profile));
+          }
         }
       } catch {
-        // ignore
+        try {
+          const raw = localStorage.getItem("agseo:siteProfile");
+          if (raw) setProfile(JSON.parse(raw));
+        } catch {
+          // ignore
+        }
       }
     })();
   }, []);
@@ -67,17 +75,22 @@ export default function SitePage() {
 
       setProfile(data.profile);
 
-      const saveRes = await fetch("/api/site", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          siteUrl,
-          profile: data.profile,
-        }),
-      });
+      // Save locally so Trends V1 can use it immediately
+      localStorage.setItem("agseo:siteProfile", JSON.stringify(data.profile));
 
-      const saveJson = await saveRes.json();
-      if (!saveRes.ok) throw new Error(saveJson?.error || "Auto-save after analysis failed");
+      // Try saving to backend too, but do not fail the UI if backend persistence has issues
+      try {
+        await fetch("/api/site", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            siteUrl,
+            profile: data.profile,
+          }),
+        });
+      } catch {
+        // ignore backend save issues for V1
+      }
     } catch (e: any) {
       setError(e?.message || "Something went wrong");
     } finally {
@@ -90,6 +103,10 @@ export default function SitePage() {
     setError(null);
 
     try {
+      if (profile) {
+        localStorage.setItem("agseo:siteProfile", JSON.stringify(profile));
+      }
+
       const res = await fetch("/api/site", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
