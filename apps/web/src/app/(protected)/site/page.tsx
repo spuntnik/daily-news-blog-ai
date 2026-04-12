@@ -65,13 +65,40 @@ export default function SitePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Analyze failed");
 
-      setProfile(data.profile);
-    } catch (e: any) {
-      setError(e?.message || "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+     async function runAnalysis() {
+  setLoading(true);
+  setError(null);
+
+  try {
+    const res = await fetch("/api/site/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteUrl, regionHint, extraContext }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Analyze failed");
+
+    setProfile(data.profile);
+
+    // NEW: persist analyzed profile immediately so /trends can use it
+    const saveRes = await fetch("/api/site", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        siteUrl,
+        profile: data.profile,
+      }),
+    });
+
+    const saveJson = await saveRes.json();
+    if (!saveRes.ok) throw new Error(saveJson?.error || "Auto-save after analysis failed");
+  } catch (e: any) {
+    setError(e?.message || "Something went wrong");
+  } finally {
+    setLoading(false);
   }
+}
 
   async function saveAndContinue() {
     setSaving(true);
