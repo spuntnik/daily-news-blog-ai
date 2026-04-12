@@ -34,77 +34,16 @@ type TrendCard = {
   region: string;
   sourceTopic: string;
   confidence: "low" | "medium" | "high";
+  sourceLabel: string;
+  url?: string;
 };
 
 const SITE_PROFILE_KEY = "agseo:siteProfile";
-
-function uniq(arr: string[]) {
-  return Array.from(new Set(arr.map((x) => (x || "").trim()).filter(Boolean)));
-}
-
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 60);
-}
 
 function confidenceColor(confidence: TrendCard["confidence"]) {
   if (confidence === "high") return "#166534";
   if (confidence === "medium") return "#a16207";
   return "#6b7280";
-}
-
-function buildTrendCards(profile: Profile, selectedTopic?: string): TrendCard[] {
-  const industry = profile.industry || "Business";
-  const audiences = uniq(profile.audiences || []);
-  const markets = uniq(profile.markets || []);
-  const topics = uniq([
-    ...(selectedTopic ? [selectedTopic] : []),
-    ...(profile.topics || []),
-  ]).slice(0, 12);
-
-  const region = markets[0] || "Global";
-  const fallbackAudience = audiences[0] || "Professionals";
-
-  const angleTemplates = [
-    "practical playbook",
-    "common mistakes and fixes",
-    "executive briefing",
-    "step-by-step guide",
-    "strategy framework",
-    "what leaders are missing",
-    "FAQ-led explainer",
-    "how to apply this now",
-  ];
-
-  const whyTemplates = [
-    `This aligns with ${industry.toLowerCase()} demand and current audience needs.`,
-    `This is highly relevant for ${fallbackAudience.toLowerCase()} facing fast-changing priorities.`,
-    `This topic supports authority-building and search intent across ${region}.`,
-    `This creates a strong bridge between strategic interest and publishable content.`,
-  ];
-
-  return topics.map((topic, i) => {
-    const audience = audiences[i % Math.max(audiences.length, 1)] || fallbackAudience;
-    const angle = angleTemplates[i % angleTemplates.length];
-    const why = whyTemplates[i % whyTemplates.length];
-    const confidence: "low" | "medium" | "high" =
-      i < 4 ? "high" : i < 8 ? "medium" : "low";
-
-    return {
-      id: slugify(`${topic}-${audience}-${region}-${i}`),
-      title: topic,
-      whyItMatters: why,
-      suggestedAngle: `${topic}: ${angle}`,
-      audience,
-      region,
-      sourceTopic: topic,
-      confidence,
-    };
-  });
 }
 
 export default function TrendsPage() {
@@ -117,6 +56,12 @@ export default function TrendsPage() {
   const [trends, setTrends] = useState<TrendCard[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [selectedTopicHint, setSelectedTopicHint] = useState("");
+  const [counts, setCounts] = useState<{
+    internal: number;
+    news: number;
+    google: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
     loadTrends();
@@ -129,7 +74,6 @@ export default function TrendsPage() {
 
     try {
       let localProfile: Profile | null = null;
-      let backendProfile: Profile | null = null;
       let kwState: StoredKwState = {};
 
       try {
@@ -159,9 +103,8 @@ export default function TrendsPage() {
           const res = await fetch("/api/site", { cache: "no-store" });
           const data = await res.json();
           if (res.ok && data?.profile) {
-            backendProfile = data.profile as Profile;
-            localProfile = backendProfile;
-            localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(backendProfile));
+            localProfile = data.profile as Profile;
+            localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(localProfile));
             setDebugSource("Loaded profile from /api/site");
           }
         } catch {
@@ -173,15 +116,40 @@ export default function TrendsPage() {
         setError("No site profile found. Go to Site Setup, click Analyze site, then return here.");
         setTrends([]);
         setProfile(null);
+        setCounts(null);
         return;
       }
 
       setProfile(localProfile);
-      setTrends(buildTrendCards(localProfile, selected));
+
+      const res = await fetch("/api/trends-v2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile: localProfile,
+          kwState,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to load Trends V2");
+      }
+
+      setTrends(Array.isArray(json?.trends) ? json.trends : []);
+      setCounts(
+        json?.counts || {
+          internal: 0,
+          news: 0,
+          google: 0,
+          total: 0,
+        }
+      );
     } catch (e: any) {
       setError(e?.message || "Failed to load trends");
       setTrends([]);
-      setProfile(null);
+      setCounts(null);
     } finally {
       setLoading(false);
     }
@@ -228,7 +196,7 @@ export default function TrendsPage() {
         <div>
           <h1 style={{ margin: 0 }}>Trends</h1>
           <p style={{ marginTop: 8, opacity: 0.8 }}>
-            Opportunity radar built from your Site Setup and saved keyword session.
+            Opportunity radar built from internal + external signals.
           </p>
         </div>
 
@@ -261,7 +229,7 @@ export default function TrendsPage() {
             padding: 14,
             border: "1px solid #eee",
             borderRadius: 12,
-            maxWidth: 980,
+            maxWidth: 1100,
           }}
         >
           <div style={{ fontWeight: 700, marginBottom: 8 }}>Profile Summary</div>
@@ -277,6 +245,12 @@ export default function TrendsPage() {
           {selectedTopicHint ? (
             <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
               <strong>Current selected topic bias:</strong> {selectedTopicHint}
+            </div>
+          ) : null}
+
+          {counts ? (
+            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
+              <strong>Signals:</strong> internal {counts.internal} · news {counts.news} · google {counts.google} · total {counts.total}
             </div>
           ) : null}
         </div>
@@ -330,6 +304,10 @@ export default function TrendsPage() {
                 </span>
               </div>
 
+              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+                Source: {trend.sourceLabel}
+              </div>
+
               <div style={{ fontSize: 14, marginBottom: 8 }}>
                 <strong>Why it matters:</strong> {trend.whyItMatters}
               </div>
@@ -346,9 +324,29 @@ export default function TrendsPage() {
                 <strong>Region:</strong> {trend.region}
               </div>
 
-              <button onClick={() => useTrendInGenerator(trend)}>
-                Use in Generator
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => useTrendInGenerator(trend)}>
+                  Use in Generator
+                </button>
+
+                {trend.url ? (
+                  <a
+                    href={trend.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "inline-block",
+                      padding: "6px 10px",
+                      border: "1px solid #ddd",
+                      borderRadius: 8,
+                      textDecoration: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    Open source
+                  </a>
+                ) : null}
+              </div>
             </article>
           ))}
         </div>
