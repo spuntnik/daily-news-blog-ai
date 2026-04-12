@@ -25,6 +25,8 @@ type StoredKwState = {
   _savedAt?: string;
 };
 
+const SITE_PROFILE_KEY = "agseo:siteProfile";
+
 export default function SitePage() {
   const router = useRouter();
 
@@ -39,25 +41,38 @@ export default function SitePage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/site");
-        const data = await res.json();
-        if (res.ok) {
-          if (data?.siteUrl) setSiteUrl(data.siteUrl);
-          if (data?.profile) {
-            setProfile(data.profile);
-            localStorage.setItem("agseo:siteProfile", JSON.stringify(data.profile));
-          }
+        const localRaw = localStorage.getItem(SITE_PROFILE_KEY);
+        if (localRaw) {
+          const localProfile = JSON.parse(localRaw) as Profile;
+          setProfile(localProfile);
         }
       } catch {
-        try {
-          const raw = localStorage.getItem("agseo:siteProfile");
-          if (raw) setProfile(JSON.parse(raw));
-        } catch {
-          // ignore
+        // ignore local parse issues
+      }
+
+      try {
+        const res = await fetch("/api/site", { cache: "no-store" });
+        const data = await res.json();
+
+        if (res.ok) {
+          if (data?.siteUrl) setSiteUrl(data.siteUrl);
+          if (data?.profile) setProfile(data.profile);
         }
+      } catch {
+        // ignore backend load issues for now
       }
     })();
   }, []);
+
+  useEffect(() => {
+    try {
+      if (profile) {
+        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
+      }
+    } catch {
+      // ignore localStorage issues
+    }
+  }, [profile]);
 
   async function runAnalysis() {
     setLoading(true);
@@ -75,10 +90,12 @@ export default function SitePage() {
 
       setProfile(data.profile);
 
-      // Save locally so Trends V1 can use it immediately
-      localStorage.setItem("agseo:siteProfile", JSON.stringify(data.profile));
+      try {
+        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(data.profile));
+      } catch {
+        // ignore
+      }
 
-      // Try saving to backend too, but do not fail the UI if backend persistence has issues
       try {
         await fetch("/api/site", {
           method: "POST",
@@ -104,7 +121,11 @@ export default function SitePage() {
 
     try {
       if (profile) {
-        localStorage.setItem("agseo:siteProfile", JSON.stringify(profile));
+        try {
+          localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
+        } catch {
+          // ignore
+        }
       }
 
       const res = await fetch("/api/site", {
