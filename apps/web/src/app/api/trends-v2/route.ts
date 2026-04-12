@@ -25,7 +25,12 @@ export async function POST(req: Request) {
     const newsSignals = await fetchNewsSignals(profile).catch(() => []);
     const googleSignals = await fetchGoogleTrendSignals(profile).catch(() => []);
 
-    const merged = [...internalSignals, ...newsSignals, ...googleSignals];
+    const merged = [
+      ...internalSignals,
+      ...newsSignals,
+      ...googleSignals,
+    ];
+
     const ranked = rankSignals(merged);
     const cards = toTrendCards(ranked);
 
