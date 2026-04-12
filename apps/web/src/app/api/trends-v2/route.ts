@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { buildInternalSignals } from "../../../../lib/trends/internalSignals";
-import { fetchNewsSignals } from "../../../../lib/trends/newsSignals";
-import { fetchGoogleTrendSignals } from "../../../../lib/trends/googleSignals";
-import { rankSignals } from "../../../../lib/trends/ranker";
-import { toTrendCards } from "../../../../lib/trends/toCards";
-import type { SiteProfile, StoredKwState } from "../../../../lib/trends/types";
+import { buildInternalSignals } from "../../../lib/trends/internalSignals";
+import { fetchNewsSignals } from "../../../lib/trends/newsSignals";
+import { fetchGoogleTrendSignals } from "../../../lib/trends/googleSignals";
+import { rankSignals } from "../../../lib/trends/ranker";
+import { toTrendCards } from "../../../lib/trends/toCards";
+import type { SiteProfile, StoredKwState } from "../../../lib/trends/types";
 
 export const runtime = "nodejs";
 
