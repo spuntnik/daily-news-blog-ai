@@ -15,7 +15,10 @@ export async function POST(req: Request) {
     const kwState = body?.kwState as StoredKwState | undefined;
 
     if (!profile) {
-      return NextResponse.json({ error: "Missing site profile" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing site profile" },
+        { status: 400 }
+      );
     }
 
     const internalSignals = buildInternalSignals(profile, kwState);
