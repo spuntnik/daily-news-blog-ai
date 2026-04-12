@@ -65,40 +65,25 @@ export default function SitePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Analyze failed");
 
-     async function runAnalysis() {
-  setLoading(true);
-  setError(null);
+      setProfile(data.profile);
 
-  try {
-    const res = await fetch("/api/site/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteUrl, regionHint, extraContext }),
-    });
+      const saveRes = await fetch("/api/site", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteUrl,
+          profile: data.profile,
+        }),
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Analyze failed");
-
-    setProfile(data.profile);
-
-    // NEW: persist analyzed profile immediately so /trends can use it
-    const saveRes = await fetch("/api/site", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        siteUrl,
-        profile: data.profile,
-      }),
-    });
-
-    const saveJson = await saveRes.json();
-    if (!saveRes.ok) throw new Error(saveJson?.error || "Auto-save after analysis failed");
-  } catch (e: any) {
-    setError(e?.message || "Something went wrong");
-  } finally {
-    setLoading(false);
+      const saveJson = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveJson?.error || "Auto-save after analysis failed");
+    } catch (e: any) {
+      setError(e?.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   async function saveAndContinue() {
     setSaving(true);
@@ -224,7 +209,9 @@ export default function SitePage() {
 
           {profile.needsClarification && profile.suggestedPromptQuestions?.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Quick questions (answer in “Extra context”)</div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                Quick questions (answer in “Extra context”)
+              </div>
               <ul style={{ marginTop: 0 }}>
                 {profile.suggestedPromptQuestions.map((q, i) => (
                   <li key={i}>{q}</li>
