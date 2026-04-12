@@ -20,6 +20,7 @@ export async function POST(req: Request) {
 
     const internalSignals = buildInternalSignals(profile, kwState);
     const [newsSignals, googleSignals] = await Promise.all([
+      console.log("Google signals:", googleSignals.length);
       fetchNewsSignals(profile).catch(() => []),
       fetchGoogleTrendSignals(profile).catch(() => []),
     ]);
