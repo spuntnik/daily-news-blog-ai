@@ -36,6 +36,8 @@ type TrendCard = {
   confidence: "low" | "medium" | "high";
 };
 
+const SITE_PROFILE_KEY = "agseo:siteProfile";
+
 function uniq(arr: string[]) {
   return Array.from(new Set(arr.map((x) => (x || "").trim()).filter(Boolean)));
 }
@@ -111,6 +113,7 @@ export default function TrendsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [debugSource, setDebugSource] = useState("");
   const [trends, setTrends] = useState<TrendCard[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [selectedTopicHint, setSelectedTopicHint] = useState("");
@@ -119,26 +122,52 @@ export default function TrendsPage() {
     loadTrends();
   }, []);
 
-  function loadTrends() {
+  async function loadTrends() {
     setLoading(true);
     setError("");
+    setDebugSource("");
 
     try {
       let localProfile: Profile | null = null;
+      let backendProfile: Profile | null = null;
       let kwState: StoredKwState = {};
 
-      const rawProfile = localStorage.getItem("agseo:siteProfile");
-      if (rawProfile) {
-        localProfile = JSON.parse(rawProfile) as Profile;
+      try {
+        const rawProfile = localStorage.getItem(SITE_PROFILE_KEY);
+        if (rawProfile) {
+          localProfile = JSON.parse(rawProfile) as Profile;
+          setDebugSource("Loaded profile from localStorage");
+        }
+      } catch {
+        // ignore
       }
 
-      const rawKw = localStorage.getItem("agseo:keywords");
-      if (rawKw) {
-        kwState = JSON.parse(rawKw) as StoredKwState;
+      try {
+        const rawKw = localStorage.getItem("agseo:keywords");
+        if (rawKw) {
+          kwState = JSON.parse(rawKw) as StoredKwState;
+        }
+      } catch {
+        // ignore
       }
 
       const selected = kwState.selectedTopic || kwState.topic || "";
       setSelectedTopicHint(selected);
+
+      if (!localProfile) {
+        try {
+          const res = await fetch("/api/site", { cache: "no-store" });
+          const data = await res.json();
+          if (res.ok && data?.profile) {
+            backendProfile = data.profile as Profile;
+            localProfile = backendProfile;
+            localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(backendProfile));
+            setDebugSource("Loaded profile from /api/site");
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       if (!localProfile) {
         setError("No site profile found. Go to Site Setup, click Analyze site, then return here.");
@@ -160,7 +189,7 @@ export default function TrendsPage() {
 
   async function refreshNow() {
     setRefreshing(true);
-    loadTrends();
+    await loadTrends();
     setRefreshing(false);
   }
 
@@ -209,6 +238,21 @@ export default function TrendsPage() {
           </button>
         </div>
       </div>
+
+      {debugSource ? (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: 10,
+            border: "1px solid #e5e7eb",
+            borderRadius: 12,
+            fontSize: 13,
+            opacity: 0.85,
+          }}
+        >
+          {debugSource}
+        </div>
+      ) : null}
 
       {profile ? (
         <div
