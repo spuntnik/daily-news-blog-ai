@@ -1,5 +1,4 @@
 // apps/web/src/app/(protected)/library/page.tsx
-// apps/web/src/app/(protected)/library/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -111,7 +110,7 @@ function Card({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.location.href = `/api/export-docx?id=${post.id}`;
+                window.location.href = `/api/export-docx?id=${encodeURIComponent(post.id)}`;
               }}
             >
               Export .docx
@@ -129,8 +128,9 @@ export default function LibraryPage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkBusy, setBulkBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -144,6 +144,7 @@ export default function LibraryPage() {
   async function load() {
     setLoading(true);
     setErr("");
+    setStatus("");
     try {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) {
@@ -203,6 +204,7 @@ export default function LibraryPage() {
 
   function clearSelection() {
     setSelectedIds([]);
+    setStatus("");
   }
 
   async function deleteSelected() {
@@ -213,7 +215,9 @@ export default function LibraryPage() {
     );
     if (!confirmed) return;
 
-    setBulkBusy(true);
+    setBusy(true);
+    setStatus("Deleting selected items...");
+
     try {
       const res = await fetch("/api/library/bulk-delete", {
         method: "POST",
@@ -225,11 +229,13 @@ export default function LibraryPage() {
       if (!res.ok) throw new Error(json?.error || "Delete failed");
 
       setSelectedIds([]);
+      setStatus(`Deleted ${json?.deleted || 0} item(s).`);
       await load();
     } catch (e: any) {
+      setStatus("");
       alert(e?.message || "Delete failed");
     } finally {
-      setBulkBusy(false);
+      setBusy(false);
     }
   }
 
@@ -244,6 +250,77 @@ export default function LibraryPage() {
     if (error) {
       await load();
       alert(error.message || "Update failed");
+    }
+  }
+
+  async function bulkMoveSelected(next: Stage) {
+    if (!selectedIds.length) return;
+
+    setBusy(true);
+    setStatus(`Moving ${selectedIds.length} item(s) to ${next}...`);
+
+    try {
+      const { error } = await supabase
+        .from("blog_posts")
+        .update({ status: next })
+        .in("id", selectedIds);
+
+      if (error) throw error;
+
+      setPosts((prev) =>
+        prev.map((p) => (selectedIds.includes(p.id) ? { ...p, status: next } : p))
+      );
+      setStatus(`Moved ${selectedIds.length} item(s) to ${next}.`);
+      setSelectedIds([]);
+    } catch (e: any) {
+      await load();
+      setStatus("");
+      alert(e?.message || "Bulk move failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function bulkExportSelected() {
+    if (!selectedIds.length) return;
+
+    setBusy(true);
+    setStatus(`Exporting ${selectedIds.length} .docx file(s)...`);
+
+    try {
+      for (const id of selectedIds) {
+        const res = await fetch(`/api/export-docx?id=${encodeURIComponent(id)}`);
+        if (!res.ok) {
+          throw new Error(`Export failed for item ${id}`);
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const matchingPost = posts.find((p) => p.id === id);
+        const safeTitle =
+          (matchingPost?.title || "blog-post")
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+            .replace(/\s+/g, "-")
+            .slice(0, 80) || "blog-post";
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${safeTitle}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      setStatus(`Exported ${selectedIds.length} .docx file(s).`);
+    } catch (e: any) {
+      setStatus("");
+      alert(e?.message || "Bulk export failed");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -277,15 +354,19 @@ export default function LibraryPage() {
         <strong style={{ fontSize: 26 }}>Library</strong>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={load} disabled={loading || bulkBusy}>
+          <button onClick={load} disabled={loading || busy}>
             {loading ? "Loading…" : "Refresh"}
           </button>
 
-          <button onClick={deleteSelected} disabled={!selectedIds.length || bulkBusy}>
+          <button onClick={bulkExportSelected} disabled={!selectedIds.length || busy}>
+            Bulk Export .docx ({selectedIds.length})
+          </button>
+
+          <button onClick={deleteSelected} disabled={!selectedIds.length || busy}>
             Delete selected ({selectedIds.length})
           </button>
 
-          <button onClick={clearSelection} disabled={!selectedIds.length || bulkBusy}>
+          <button onClick={clearSelection} disabled={!selectedIds.length || busy}>
             Clear selection
           </button>
 
@@ -299,18 +380,39 @@ export default function LibraryPage() {
         </div>
       ) : null}
 
+      {status ? (
+        <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, marginBottom: 12 }}>
+          {status}
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <button onClick={() => selectAllInStage("draft")} disabled={bulkBusy}>
+        <button onClick={() => selectAllInStage("draft")} disabled={busy}>
           Select all Draft
         </button>
-        <button onClick={() => selectAllInStage("review")} disabled={bulkBusy}>
+        <button onClick={() => selectAllInStage("review")} disabled={busy}>
           Select all Review
         </button>
-        <button onClick={() => selectAllInStage("scheduled")} disabled={bulkBusy}>
+        <button onClick={() => selectAllInStage("scheduled")} disabled={busy}>
           Select all Scheduled
         </button>
-        <button onClick={() => selectAllInStage("published")} disabled={bulkBusy}>
+        <button onClick={() => selectAllInStage("published")} disabled={busy}>
           Select all Published
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <button onClick={() => bulkMoveSelected("draft")} disabled={!selectedIds.length || busy}>
+          Move selected to Draft
+        </button>
+        <button onClick={() => bulkMoveSelected("review")} disabled={!selectedIds.length || busy}>
+          Move selected to Review
+        </button>
+        <button onClick={() => bulkMoveSelected("scheduled")} disabled={!selectedIds.length || busy}>
+          Move selected to Scheduled
+        </button>
+        <button onClick={() => bulkMoveSelected("published")} disabled={!selectedIds.length || busy}>
+          Move selected to Published
         </button>
       </div>
 
