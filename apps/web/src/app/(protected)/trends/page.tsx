@@ -17,12 +17,12 @@ type TrendCard = {
 
 function getConfidenceClasses(confidence: TrendCard["confidence"]) {
   if (confidence === "high") {
-    return "border-[#85ecb7] bg-[#85ecb7]/20 text-[#213151]";
+    return "border-emerald-300 bg-emerald-100 text-emerald-900";
   }
   if (confidence === "medium") {
-    return "border-[#c9937d] bg-[#c9937d]/20 text-[#213151]";
+    return "border-amber-300 bg-amber-100 text-amber-900";
   }
-  return "border-[#eef5f4] bg-[#eef5f4]/20 text-[#213151]";
+  return "border-slate-300 bg-slate-100 text-slate-700";
 }
 
 export default function TrendsPage() {
@@ -63,14 +63,14 @@ export default function TrendsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#213151] px-6 py-6 text-[#eef5f4] md:px-8 lg:px-10">
+    <main className="min-h-screen text-slate-100">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-3xl bg-[#58739c] p-6 shadow-lg">
-          <div className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#eef5f4]/80">
+        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+          <div className="inline-flex rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
             Opportunity Radar
           </div>
-          <h1 className="mt-4 text-3xl font-semibold">Trends</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#213151]">
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight">Trends</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
             Opportunity radar built from internal, news, and Google Trends
             signals. Use this page to spot timely topics and push them directly
             into the Generator.
@@ -78,15 +78,25 @@ export default function TrendsPage() {
         </section>
 
         {loading ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-8 text-slate-300">
             Loading trends...
+          </div>
+        ) : trends.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
+            <h2 className="text-lg font-semibold text-slate-100">
+              No trends available yet
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              The trends API returned no items for this load. Once data is
+              available, cards will appear here.
+            </p>
           </div>
         ) : (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {trends.map((trend) => (
               <article
                 key={trend.id}
-                className="rounded-3xl bg-[#58739c] p-6 text-[#213151] shadow-lg"
+                className="rounded-3xl border border-slate-800 bg-slate-200 p-6 text-slate-900 shadow-xl"
               >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-lg font-semibold leading-tight">
@@ -110,24 +120,24 @@ export default function TrendsPage() {
                 </p>
 
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-2xl bg-[#eef5f4]/50 p-3">
-                    <div className="text-xs uppercase tracking-wide text-[#213151]/60">
+                  <div className="rounded-2xl bg-white/70 p-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">
                       Audience
                     </div>
                     <div className="mt-1 font-medium">{trend.audience}</div>
                   </div>
-                  <div className="rounded-2xl bg-[#eef5f4]/50 p-3">
-                    <div className="text-xs uppercase tracking-wide text-[#213151]/60">
+                  <div className="rounded-2xl bg-white/70 p-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">
                       Region
                     </div>
                     <div className="mt-1 font-medium">{trend.region}</div>
                   </div>
                 </div>
 
-                <div className="mt-5 flex gap-3">
+                <div className="mt-5 flex flex-wrap gap-3">
                   <button
                     onClick={() => useTrend(trend)}
-                    className="rounded-xl bg-[#213151] px-4 py-2 text-sm font-semibold text-[#eef5f4]"
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
                   >
                     Use in Generator
                   </button>
@@ -137,7 +147,7 @@ export default function TrendsPage() {
                       href={trend.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-xl border border-[#213151]/20 bg-[#eef5f4]/60 px-4 py-2 text-sm font-semibold text-[#213151] no-underline"
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 no-underline"
                     >
                       Open source
                     </a>
