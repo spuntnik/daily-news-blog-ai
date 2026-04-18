@@ -43,6 +43,30 @@ type TrendCard = {
 
 const SITE_PROFILE_KEY = "agseo:siteProfile";
 
+function getConfidenceStyles(confidence?: "low" | "medium" | "high") {
+  if (confidence === "high") {
+    return {
+      color: "#166534",
+      background: "#dcfce7",
+      border: "1px solid #86efac",
+    };
+  }
+
+  if (confidence === "medium") {
+    return {
+      color: "#92400e",
+      background: "#fef3c7",
+      border: "1px solid #fcd34d",
+    };
+  }
+
+  return {
+    color: "#475569",
+    background: "#f1f5f9",
+    border: "1px solid #cbd5e1",
+  };
+}
+
 export default function TrendsPage() {
   const [loading, setLoading] = useState(true);
   const [trends, setTrends] = useState<TrendCard[]>([]);
@@ -123,54 +147,133 @@ export default function TrendsPage() {
 
   return (
     <main>
-      <h1>Trends</h1>
-      <p>Opportunity radar built from internal, news, and Google Trends signals.</p>
+      <h1 style={{ marginTop: 0, marginBottom: 12 }}>Trends</h1>
+      <p style={{ marginTop: 0, marginBottom: 20 }}>
+        Opportunity radar built from internal, news, and Google Trends signals.
+      </p>
 
-      {error ? <p style={{ color: "crimson" }}>{error}</p> : null}
+      {error ? (
+        <p style={{ color: "crimson", marginBottom: 16 }}>{error}</p>
+      ) : null}
 
       {loading ? (
         <p>Loading...</p>
       ) : trends.length === 0 ? (
         <p>No trends available yet.</p>
       ) : (
-        <div style={{ display: "grid", gap: 16 }}>
-          {trends.map((trend) => (
-            <div
-              key={trend.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: 12,
-                padding: 16,
-                background: "#fff",
-              }}
-            >
-              <h3 style={{ marginTop: 0 }}>{trend.title}</h3>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: 18,
+            alignItems: "start",
+          }}
+        >
+          {trends.map((trend) => {
+            const badgeStyle = getConfidenceStyles(trend.confidence);
 
-              {trend.whyItMatters ? (
-                <p>
-                  <strong>Why it matters:</strong> {trend.whyItMatters}
-                </p>
-              ) : null}
+            return (
+              <div
+                key={trend.id}
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 14,
+                  padding: 16,
+                  background: "#fff",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 12,
+                    marginBottom: 12,
+                  }}
+                >
+                  <h3
+                    style={{
+                      margin: 0,
+                      lineHeight: 1.35,
+                      fontSize: 18,
+                    }}
+                  >
+                    {trend.title}
+                  </h3>
 
-              {trend.suggestedAngle ? (
-                <p>
-                  <strong>Suggested angle:</strong> {trend.suggestedAngle}
-                </p>
-              ) : null}
+                  <span
+                    style={{
+                      ...badgeStyle,
+                      borderRadius: 999,
+                      padding: "4px 10px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textTransform: "capitalize",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {trend.confidence || "low"}
+                  </span>
+                </div>
 
-              {trend.audience ? (
-                <p>
-                  <strong>Audience:</strong> {trend.audience}
-                </p>
-              ) : null}
+                {trend.sourceLabel ? (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: 0.7,
+                      marginBottom: 12,
+                    }}
+                  >
+                    Source: {trend.sourceLabel}
+                  </div>
+                ) : null}
 
-              {trend.region ? (
-                <p>
-                  <strong>Region:</strong> {trend.region}
-                </p>
-              ) : null}
-            </div>
-          ))}
+                {trend.whyItMatters ? (
+                  <p style={{ marginTop: 0 }}>
+                    <strong>Why it matters:</strong> {trend.whyItMatters}
+                  </p>
+                ) : null}
+
+                {trend.suggestedAngle ? (
+                  <p>
+                    <strong>Suggested angle:</strong> {trend.suggestedAngle}
+                  </p>
+                ) : null}
+
+                {trend.audience ? (
+                  <p>
+                    <strong>Audience:</strong> {trend.audience}
+                  </p>
+                ) : null}
+
+                {trend.region ? (
+                  <p style={{ marginBottom: trend.url ? 16 : 0 }}>
+                    <strong>Region:</strong> {trend.region}
+                  </p>
+                ) : null}
+
+                {trend.url ? (
+                  <a
+                    href={trend.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: "inline-block",
+                      padding: "8px 12px",
+                      border: "1px solid #ddd",
+                      borderRadius: 8,
+                      textDecoration: "none",
+                      color: "inherit",
+                      fontSize: 14,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Open source
+                  </a>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </main>
