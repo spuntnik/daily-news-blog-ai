@@ -1,7 +1,8 @@
  fix/library-route
 @import "tailwindcss";
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
 }
