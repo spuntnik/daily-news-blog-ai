@@ -1,8 +1,7 @@
-// apps/web/src/app/(protected)/keywords/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { usePageState } from "../../../utils/usePageState";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
 
@@ -26,10 +25,14 @@ type Row = {
   value: string;
 };
 
+const MAX_SELECTED = 5;
+
 export default function KeywordsPage() {
+  const router = useRouter();
   const supabase = supabaseBrowser();
   const searchParams = useSearchParams();
   const didAutoRun = useRef(false);
+  const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
 
   const { state, setState, loaded } = usePageState("/keywords-v2", {
     topic: "",
@@ -50,7 +53,19 @@ export default function KeywordsPage() {
     return buckets;
   }, [rows]);
 
-  // 1) Auto-prefill from URL (?topic=...) or from /site saved state.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("agseo:keywords");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.selectedKeywords)) {
+        setSelectedKeywords(parsed.selectedKeywords.slice(0, MAX_SELECTED));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!loaded) return;
 
@@ -60,7 +75,6 @@ export default function KeywordsPage() {
       return;
     }
 
-    // If still no topic, try to fetch from user_sites.site_setup_state
     if (!state.topic) {
       (async () => {
         const { data: auth } = await supabase.auth.getUser();
@@ -88,7 +102,6 @@ export default function KeywordsPage() {
     }
   }, [loaded]);
 
-  // 2) Auto-run generate ONCE when we have a topic but no rows yet.
   useEffect(() => {
     if (!loaded) return;
     if (didAutoRun.current) return;
@@ -98,6 +111,28 @@ export default function KeywordsPage() {
     didAutoRun.current = true;
     generate();
   }, [loaded, topic]);
+
+  function persistKeywordSession(nextSelectedKeywords?: string[]) {
+    if (typeof window === "undefined") return;
+
+    const selected = nextSelectedKeywords ?? selectedKeywords;
+
+    localStorage.setItem(
+      "agseo:keywords",
+      JSON.stringify({
+        topic,
+        selectedTopic: selected[0] || topic,
+        selectedKeywords: selected,
+        audience,
+        region,
+        language,
+        seo: data?.seo ?? null,
+        geo: data?.geo ?? null,
+        aeo: data?.aeo ?? null,
+        _savedAt: new Date().toISOString(),
+      })
+    );
+  }
 
   async function generate() {
     setState((s) => ({
@@ -115,70 +150,37 @@ export default function KeywordsPage() {
         body: JSON.stringify({ topic, audience, region, language }),
       });
 
-const json = await res.json();
-if (!res.ok) throw new Error(json?.error || "Request failed");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Request failed");
 
-// Force-save keyword session for Generator (robust)
-try {
-  const session = {
-    topic,
-    audience,
-    region,
-    language,
-    seo: json?.seo ?? null,
-    geo: json?.geo ?? null,
-    aeo: json?.aeo ?? null,
-    _savedAt: new Date().toISOString(),
-  };
+      const payload = json as ApiPayload;
+      const nextRows: Row[] = [];
 
-  localStorage.setItem("agseo:keywords", JSON.stringify(session));
-
-  console.log("agseo:keywords saved", {
-    bytes: localStorage.getItem("agseo:keywords")?.length,
-    savedAt: session._savedAt,
-    hasSeo: !!session.seo,
-    hasGeo: !!session.geo,
-    hasAeo: !!session.aeo,
-  });
-  
-} catch (e) {
-  console.log("agseo:keywords save FAILED", e);
-}// Save keywords session for Generator (only after success)
-if (typeof window !== "undefined" && json?.seo && json?.geo && json?.aeo) {
-  localStorage.setItem(
-    "agseo:keywords",
-    JSON.stringify({
-      topic,
-      audience,
-      region,
-      seo: json.seo,
-      geo: json.geo,
-      aeo: json.aeo,
-    })
-  );
-}
-console.log("Saved agseo:keywords bytes:", localStorage.getItem("agseo:keywords")?.length);
-      
-const payload = json as ApiPayload;
-
-const nextRows: Row[] = [];
-
-      // SEO
-      for (const k of payload.seo.seed || []) nextRows.push({ bucket: "SEO", type: "seed", value: k });
+      for (const k of payload.seo.seed || []) {
+        nextRows.push({ bucket: "SEO", type: "seed", value: k });
+      }
       for (const c of payload.seo.clusters || []) {
-        for (const k of c.keywords || []) nextRows.push({ bucket: "SEO", type: "cluster", clusterName: c.name, value: k });
+        for (const k of c.keywords || []) {
+          nextRows.push({ bucket: "SEO", type: "cluster", clusterName: c.name, value: k });
+        }
       }
 
-      // GEO
-      for (const k of payload.geo.seed || []) nextRows.push({ bucket: "GEO", type: "seed", value: k });
+      for (const k of payload.geo.seed || []) {
+        nextRows.push({ bucket: "GEO", type: "seed", value: k });
+      }
       for (const c of payload.geo.clusters || []) {
-        for (const k of c.keywords || []) nextRows.push({ bucket: "GEO", type: "cluster", clusterName: c.name, value: k });
+        for (const k of c.keywords || []) {
+          nextRows.push({ bucket: "GEO", type: "cluster", clusterName: c.name, value: k });
+        }
       }
 
-      // AEO
-      for (const k of payload.aeo.seed || []) nextRows.push({ bucket: "AEO", type: "seed", value: k });
+      for (const k of payload.aeo.seed || []) {
+        nextRows.push({ bucket: "AEO", type: "seed", value: k });
+      }
       for (const c of payload.aeo.clusters || []) {
-        for (const q of c.questions || []) nextRows.push({ bucket: "AEO", type: "cluster", clusterName: c.name, value: q });
+        for (const q of c.questions || []) {
+          nextRows.push({ bucket: "AEO", type: "cluster", clusterName: c.name, value: q });
+        }
       }
 
       setState((s) => ({
@@ -187,6 +189,22 @@ const nextRows: Row[] = [];
         data: payload,
         rows: nextRows,
       }));
+
+      localStorage.setItem(
+        "agseo:keywords",
+        JSON.stringify({
+          topic,
+          selectedTopic: selectedKeywords[0] || topic,
+          selectedKeywords,
+          audience,
+          region,
+          language,
+          seo: payload.seo,
+          geo: payload.geo,
+          aeo: payload.aeo,
+          _savedAt: new Date().toISOString(),
+        })
+      );
     } catch (e: any) {
       setState((s) => ({
         ...s,
@@ -194,6 +212,48 @@ const nextRows: Row[] = [];
         error: e?.message || "Something went wrong",
       }));
     }
+  }
+
+  function toggleKeyword(value: string) {
+    setSelectedKeywords((prev) => {
+      let next: string[];
+
+      if (prev.includes(value)) {
+        next = prev.filter((item) => item !== value);
+      } else {
+        if (prev.length >= MAX_SELECTED) {
+          return prev;
+        }
+        next = [...prev, value];
+      }
+
+      try {
+        localStorage.setItem(
+          "agseo:keywords",
+          JSON.stringify({
+            topic,
+            selectedTopic: next[0] || topic,
+            selectedKeywords: next,
+            audience,
+            region,
+            language,
+            seo: data?.seo ?? null,
+            geo: data?.geo ?? null,
+            aeo: data?.aeo ?? null,
+            _savedAt: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // ignore
+      }
+
+      return next;
+    });
+  }
+
+  function sendSelectedToGenerator() {
+    persistKeywordSession(selectedKeywords);
+    router.push("/generator");
   }
 
   function exportJson() {
@@ -272,7 +332,7 @@ const nextRows: Row[] = [];
           />
         </label>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={generate} disabled={loading || topic.trim().length < 2}>
             {loading ? "Generating..." : "Generate keywords"}
           </button>
@@ -284,7 +344,18 @@ const nextRows: Row[] = [];
           <button onClick={exportCsv} disabled={!rows.length}>
             Export CSV
           </button>
+
+          <button onClick={sendSelectedToGenerator} disabled={selectedKeywords.length === 0}>
+            Send selected to Blog Generator
+          </button>
         </div>
+
+        {selectedKeywords.length > 0 && (
+          <div style={{ marginTop: 4, fontSize: 14 }}>
+            <strong>Selected ({selectedKeywords.length}/{MAX_SELECTED}):</strong>{" "}
+            {selectedKeywords.join(", ")}
+          </div>
+        )}
 
         {error && <div style={{ color: "crimson" }}>{error}</div>}
       </div>
@@ -297,6 +368,8 @@ const nextRows: Row[] = [];
             clusterCount={data?.seo.clusters?.length || 0}
             rows={grouped.SEO}
             valueLabel="Keyword"
+            selectedKeywords={selectedKeywords}
+            onToggleKeyword={toggleKeyword}
           />
           <Bucket
             title="GEO Keywords"
@@ -304,6 +377,8 @@ const nextRows: Row[] = [];
             clusterCount={data?.geo.clusters?.length || 0}
             rows={grouped.GEO}
             valueLabel="Keyword"
+            selectedKeywords={selectedKeywords}
+            onToggleKeyword={toggleKeyword}
           />
           <Bucket
             title="AEO Questions"
@@ -311,6 +386,8 @@ const nextRows: Row[] = [];
             clusterCount={data?.aeo.clusters?.length || 0}
             rows={grouped.AEO}
             valueLabel="Question"
+            selectedKeywords={selectedKeywords}
+            onToggleKeyword={toggleKeyword}
           />
         </div>
       )}
@@ -324,12 +401,16 @@ function Bucket({
   clusterCount,
   rows,
   valueLabel,
+  selectedKeywords,
+  onToggleKeyword,
 }: {
   title: string;
   seedCount: number;
   clusterCount: number;
   rows: Row[];
   valueLabel: string;
+  selectedKeywords: string[];
+  onToggleKeyword: (value: string) => void;
 }) {
   const seeds = rows.filter((r) => r.type === "seed");
   const clusters = rows.filter((r) => r.type === "cluster");
@@ -348,14 +429,27 @@ function Bucket({
         <div style={{ marginTop: 8 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Seed list</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {seeds.map((s, idx) => (
-              <span
-                key={idx}
-                style={{ border: "1px solid #ddd", borderRadius: 999, padding: "6px 10px", fontSize: 13 }}
-              >
-                {s.value}
-              </span>
-            ))}
+            {seeds.map((s, idx) => {
+              const selected = selectedKeywords.includes(s.value);
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => onToggleKeyword(s.value)}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    background: selected ? "#111" : "#fff",
+                    color: selected ? "#fff" : "#111",
+                  }}
+                >
+                  {s.value}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -364,19 +458,31 @@ function Bucket({
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
+              <th align="left">Select</th>
               <th align="left">Cluster</th>
               <th align="left">{valueLabel}</th>
               <th align="left">Type</th>
             </tr>
           </thead>
           <tbody>
-            {clusters.slice(0, 80).map((r, idx) => (
-              <tr key={idx}>
-                <td style={{ padding: "8px 0" }}>{r.clusterName || "-"}</td>
-                <td>{r.value}</td>
-                <td>{r.type}</td>
-              </tr>
-            ))}
+            {clusters.slice(0, 80).map((r, idx) => {
+              const selected = selectedKeywords.includes(r.value);
+
+              return (
+                <tr key={idx}>
+                  <td style={{ padding: "8px 0" }}>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => onToggleKeyword(r.value)}
+                    />
+                  </td>
+                  <td style={{ padding: "8px 0" }}>{r.clusterName || "-"}</td>
+                  <td>{r.value}</td>
+                  <td>{r.type}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
