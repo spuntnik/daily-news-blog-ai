@@ -2,6 +2,15 @@ import Link from "next/link";
 
 export default function Home() {
   return (
+    export default function Page() {
+  return (
+    <main>
+      <h1 className="text-4xl font-bold text-blue-500">
+        Tailwind is working
+      </h1>
+    </main>
+  );
+}
     <main style={{ minHeight: "100vh", padding: "72px 28px", fontFamily: "ui-sans-serif, system-ui" }}>
       <div style={{ maxWidth: 1040, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
