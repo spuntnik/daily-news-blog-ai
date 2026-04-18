@@ -206,7 +206,7 @@ export default function TrendsPage() {
   return (
     <main className="min-h-screen bg-[#213151] px-6 py-6 text-[#eef5f4] md:px-8 lg:px-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#58739c] to-[#213152] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] md:p-8">
+        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#58739c] to-[#213151] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] md:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="max-w-3xl">
               <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-[#eef5f4]/80">
