@@ -2,6 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
+ fix/library-route
     <main style={{ minHeight: "100vh", padding: "72px 28px", fontFamily: "ui-sans-serif, system-ui" }}>
 <h1 className="text-4xl font-bold text-blue-500">
   Tailwind is working
@@ -9,20 +10,57 @@ export default function Home() {
 
 <div style={{ maxWidth: 1040, margin: "0 auto" }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: "72px 28px",
+        fontFamily: "ui-sans-serif, system-ui",
+      }}
+    >
+      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+ main
           <div style={{ fontWeight: 800, fontSize: 18 }}>AG SEO Studio</div>
           <nav style={{ display: "flex", gap: 14 }}>
-            <a href="#features" style={{ textDecoration: "none" }}>Features</a>
-            <a href="#how" style={{ textDecoration: "none" }}>How it works</a>
-            <a href="#pricing" style={{ textDecoration: "none" }}>Access</a>
+            <a href="#features" style={{ textDecoration: "none" }}>
+              Features
+            </a>
+            <a href="#how" style={{ textDecoration: "none" }}>
+              How it works
+            </a>
+            <a href="#pricing" style={{ textDecoration: "none" }}>
+              Access
+            </a>
           </nav>
         </header>
 
-        <section style={{ marginTop: 64, display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 32 }}>
+        <section
+          style={{
+            marginTop: 64,
+            display: "grid",
+            gridTemplateColumns: "1.1fr 0.9fr",
+            gap: 32,
+          }}
+        >
           <div>
             <h1 style={{ fontSize: 48, lineHeight: 1.05, margin: "0 0 14px 0" }}>
               Turn daily topics into publish-ready SEO content.
             </h1>
-            <p style={{ fontSize: 18, lineHeight: 1.6, maxWidth: 600, margin: "0 0 22px 0" }}>
+            <p
+              style={{
+                fontSize: 18,
+                lineHeight: 1.6,
+                maxWidth: 600,
+                margin: "0 0 22px 0",
+              }}
+            >
               Newsfeeder + Blog Generator + Keyword Engine (SEO / GEO / AEO) with region targeting.
               Built for creators, agencies, and internal content teams.
             </p>
@@ -69,11 +107,27 @@ export default function Home() {
               </a>
             </div>
 
-            <div style={{ marginTop: 24, display: "flex", gap: 10, flexWrap: "wrap", color: "#444" }}>
-              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>Open topic</span>
-              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>Auto categories</span>
-              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>Region: SG/MY/Global</span>
-              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>API-ready</span>
+            <div
+              style={{
+                marginTop: 24,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                color: "#444",
+              }}
+            >
+              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>
+                Open topic
+              </span>
+              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>
+                Auto categories
+              </span>
+              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>
+                Region: SG/MY/Global
+              </span>
+              <span style={{ border: "1px solid #eee", padding: "6px 10px", borderRadius: 999 }}>
+                API-ready
+              </span>
             </div>
           </div>
 
@@ -121,9 +175,17 @@ export default function Home() {
 
         <section id="how" style={{ marginTop: 64 }}>
           <h2 style={{ fontSize: 28, marginBottom: 12 }}>How it works</h2>
-          <div style={{ border: "1px solid #eee", borderRadius: 14, padding: 14, lineHeight: 1.8, color: "#333" }}>
-            1) Ingest topics → 2) Detect category + intent → 3) Generate blog outline + draft → 4) Generate keyword sets
-            (SEO/GEO/AEO) → 5) Export via API.
+          <div
+            style={{
+              border: "1px solid #eee",
+              borderRadius: 14,
+              padding: 14,
+              lineHeight: 1.8,
+              color: "#333",
+            }}
+          >
+            1) Ingest topics → 2) Detect category + intent → 3) Generate blog outline + draft → 4) Generate keyword
+            sets (SEO/GEO/AEO) → 5) Export via API.
           </div>
         </section>
 

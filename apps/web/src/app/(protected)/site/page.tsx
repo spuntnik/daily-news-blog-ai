@@ -14,6 +14,19 @@ type Profile = {
   suggestedPromptQuestions: string[];
 };
 
+type StoredKwState = {
+  topic?: string;
+  selectedTopic?: string;
+  audience?: string;
+  region?: string;
+  seo?: any;
+  geo?: any;
+  aeo?: any;
+  _savedAt?: string;
+};
+
+const SITE_PROFILE_KEY = "agseo:siteProfile";
+
 export default function SitePage() {
   const router = useRouter();
 
@@ -25,21 +38,41 @@ export default function SitePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load saved site/profile
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/site");
+        const localRaw = localStorage.getItem(SITE_PROFILE_KEY);
+        if (localRaw) {
+          const localProfile = JSON.parse(localRaw) as Profile;
+          setProfile(localProfile);
+        }
+      } catch {
+        // ignore local parse issues
+      }
+
+      try {
+        const res = await fetch("/api/site", { cache: "no-store" });
         const data = await res.json();
+
         if (res.ok) {
           if (data?.siteUrl) setSiteUrl(data.siteUrl);
           if (data?.profile) setProfile(data.profile);
         }
       } catch {
-        // ignore
+        // ignore backend load issues for now
       }
     })();
   }, []);
+
+  useEffect(() => {
+    try {
+      if (profile) {
+        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
+      }
+    } catch {
+      // ignore localStorage issues
+    }
+  }, [profile]);
 
   async function runAnalysis() {
     setLoading(true);
@@ -57,10 +90,23 @@ export default function SitePage() {
 
       setProfile(data.profile);
 
-      // If analysis is confident, let user proceed
-      if (data?.profile && !data.profile.needsClarification) {
-        // optional: auto-redirect
-        // router.push("/dashboard");
+      try {
+        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(data.profile));
+      } catch {
+        // ignore
+      }
+
+      try {
+        await fetch("/api/site", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            siteUrl,
+            profile: data.profile,
+          }),
+        });
+      } catch {
+        // ignore backend save issues for V1
       }
     } catch (e: any) {
       setError(e?.message || "Something went wrong");
@@ -74,6 +120,14 @@ export default function SitePage() {
     setError(null);
 
     try {
+      if (profile) {
+        try {
+          localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
+        } catch {
+          // ignore
+        }
+      }
+
       const res = await fetch("/api/site", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,6 +142,35 @@ export default function SitePage() {
       setError(e?.message || "Something went wrong");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function handleTopicClick(topic: string) {
+    try {
+      const raw = localStorage.getItem("agseo:keywords");
+      let existing: StoredKwState = {};
+
+      if (raw) {
+        try {
+          existing = JSON.parse(raw);
+        } catch {
+          existing = {};
+        }
+      }
+
+      const nextState: StoredKwState = {
+        ...existing,
+        topic,
+        selectedTopic: topic,
+        audience: existing.audience || profile?.audiences?.[0] || "general",
+        region: existing.region || regionHint || profile?.markets?.[0] || "global",
+        _savedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem("agseo:keywords", JSON.stringify(nextState));
+      router.push("/generator");
+    } catch {
+      router.push("/generator");
     }
   }
 
@@ -164,7 +247,9 @@ export default function SitePage() {
 
           {profile.needsClarification && profile.suggestedPromptQuestions?.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Quick questions (answer in “Extra context”)</div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                Quick questions (answer in “Extra context”)
+              </div>
               <ul style={{ marginTop: 0 }}>
                 {profile.suggestedPromptQuestions.map((q, i) => (
                   <li key={i}>{q}</li>
@@ -176,7 +261,11 @@ export default function SitePage() {
           <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
             <Section title="Audiences" items={profile.audiences} />
             <Section title="Markets" items={profile.markets} />
-            <Section title="Recommended Blog Topics" items={profile.topics} />
+            <ClickableTopicsSection
+              title="Recommended Blog Topics"
+              items={profile.topics}
+              onTopicClick={handleTopicClick}
+            />
 
             <div>
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Competitors</div>
@@ -228,6 +317,43 @@ function Section({ title, items }: { title: string; items: string[] }) {
           >
             {t}
           </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClickableTopicsSection({
+  title,
+  items,
+  onTopicClick,
+}: {
+  title: string;
+  items: string[];
+  onTopicClick: (topic: string) => void;
+}) {
+  return (
+    <div>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {items.map((t, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onTopicClick(t)}
+            style={{
+              border: "1px solid #eee",
+              borderRadius: 999,
+              padding: "6px 10px",
+              fontSize: 13,
+              opacity: 0.95,
+              background: "#fff",
+              cursor: "pointer",
+            }}
+            title={`Use "${t}" in Generator`}
+          >
+            {t}
+          </button>
         ))}
       </div>
     </div>

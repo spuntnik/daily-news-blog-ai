@@ -3,9 +3,11 @@
 
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
+import type { AddonProfile, GeneratorMode } from "../../../lib/addon/types";
 
 type KwState = {
   topic?: string;
+  selectedTopic?: string;
   audience?: string;
   region?: string;
   seo?: any;
@@ -20,10 +22,25 @@ type Generated = {
   content_md: string;
 };
 
+type AddonGenerated = {
+  blogTitle: string;
+  seoTitle: string;
+  metaDescription: string;
+  blogHtml: string;
+  faqs: { question: string; answer: string }[];
+  cta: string;
+};
+
 export default function GeneratorPage() {
   const supabase = supabaseBrowser();
 
   const [kwState, setKwState] = useState<KwState | null>(null);
+  const [topicInput, setTopicInput] = useState("");
+
+  const [mode, setMode] = useState<GeneratorMode>("standard");
+  const [profile, setProfile] = useState<AddonProfile>("strategic-article");
+  const [activeTab, setActiveTab] = useState<"blog" | "seo" | "faq">("blog");
+  const [addonResult, setAddonResult] = useState<AddonGenerated | null>(null);
 
   const [title, setTitle] = useState("Sample Blog Title");
   const [excerpt, setExcerpt] = useState("Short excerpt / standfast goes here.");
@@ -35,38 +52,45 @@ export default function GeneratorPage() {
   const [lastSavedId, setLastSavedId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
 
-  // Load latest keywords session saved by Keywords page
   useEffect(() => {
     try {
       const raw = localStorage.getItem("agseo:keywords");
       if (!raw) {
         setKwState(null);
+        setTopicInput("");
         return;
       }
+
       const parsed = JSON.parse(raw);
       setKwState(parsed);
+      setTopicInput(parsed.selectedTopic || parsed.topic || "");
     } catch {
       setKwState(null);
+      setTopicInput("");
     }
   }, []);
 
   function canGenerate() {
-    return !!kwState?.topic && !!kwState?.seo && !!kwState?.geo && !!kwState?.aeo;
+    return !!topicInput && !!kwState?.seo && !!kwState?.geo && !!kwState?.aeo;
   }
 
   async function generateOne(variation_hint?: string): Promise<Generated> {
-    if (!kwState?.topic) throw new Error("No keyword data found. Go to Keywords and generate first.");
+    if (!topicInput) {
+      throw new Error("No topic found. Go to Site or Keywords and select a topic first.");
+    }
 
     const res = await fetch("/api/generate-blog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic: kwState.topic,
-        audience: kwState.audience,
-        region: kwState.region,
-        seo: kwState.seo,
-        geo: kwState.geo,
-        aeo: kwState.aeo,
+        mode,
+        profile,
+        topic: topicInput,
+        audience: kwState?.audience,
+        region: kwState?.region,
+        seo: kwState?.seo,
+        geo: kwState?.geo,
+        aeo: kwState?.aeo,
         variation_hint: variation_hint || "",
       }),
     });
@@ -74,8 +98,30 @@ export default function GeneratorPage() {
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Generate failed");
 
+    if (mode === "addon-beta") {
+      const addonPayload: AddonGenerated = {
+        blogTitle: json.blogTitle || topicInput,
+        seoTitle: json.seoTitle || "",
+        metaDescription: json.metaDescription || "",
+        blogHtml: json.blogHtml || "",
+        faqs: Array.isArray(json.faqs) ? json.faqs : [],
+        cta: json.cta || "",
+      };
+
+      setAddonResult(addonPayload);
+      setActiveTab("blog");
+
+      return {
+        title: addonPayload.blogTitle,
+        excerpt: addonPayload.metaDescription || "",
+        content_md: addonPayload.blogHtml || "",
+      };
+    }
+
+    setAddonResult(null);
+
     return {
-      title: json.title || kwState.topic,
+      title: json.title || topicInput,
       excerpt: json.excerpt || "",
       content_md: json.content_md || "",
     };
@@ -85,7 +131,6 @@ export default function GeneratorPage() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) throw new Error("Not signed in.");
 
-    // Insert + return id
     const { data, error } = await supabase
       .from("blog_posts")
       .insert({
@@ -93,12 +138,23 @@ export default function GeneratorPage() {
         title: d.title,
         excerpt: d.excerpt,
         content_md: d.content_md,
-        content_html: null,
+        content_html: mode === "addon-beta" ? addonResult?.blogHtml || null : null,
         sources: {
           keywords_source: "agseo:keywords",
-          topic: kwState?.topic || null,
+          topic: topicInput || null,
           region: kwState?.region || null,
           savedAt: kwState?._savedAt || null,
+          mode,
+          profile: mode === "addon-beta" ? profile : null,
+          addon:
+            mode === "addon-beta"
+              ? {
+                  seoTitle: addonResult?.seoTitle || "",
+                  metaDescription: addonResult?.metaDescription || "",
+                  faqs: addonResult?.faqs || [],
+                  cta: addonResult?.cta || "",
+                }
+              : null,
         },
         status: "draft",
       })
@@ -116,18 +172,28 @@ export default function GeneratorPage() {
   }
 
   async function autoGenerateOneToEditor() {
-    setStatus("Generating blog...");
+    setStatus(mode === "addon-beta" ? "Generating add-on content..." : "Generating blog...");
     setBusy(true);
+
     try {
       if (!canGenerate()) {
-        setStatus("No keyword data found. Go to Keywords and generate first.");
+        setStatus("No topic or keyword session found. Go to Site or Keywords first.");
         return;
       }
+
       const d = await generateOne("");
+
       setTitle(d.title);
       setExcerpt(d.excerpt);
       setContentMd(d.content_md);
-      setStatus("Generated. Review, then Save draft to Library.");
+
+      if (mode === "addon-beta") {
+        setStatus("Generated add-on content. Saving to Library...");
+        const id = await saveDraftToLibrary(d);
+        setStatus(id ? "Generated and auto-saved to Library." : "Generated and auto-saved to Library.");
+      } else {
+        setStatus("Generated. Review, then Save draft to Library.");
+      }
     } catch (e: any) {
       setStatus(e?.message || "Something went wrong");
     } finally {
@@ -138,8 +204,13 @@ export default function GeneratorPage() {
   async function saveCurrentDraft() {
     setStatus("Saving...");
     setBusy(true);
+
     try {
-      const id = await saveDraftToLibrary({ title, excerpt, content_md: contentMd });
+      const id = await saveDraftToLibrary({
+        title,
+        excerpt,
+        content_md: contentMd,
+      });
       setStatus(id ? "Saved to Library." : "Saved to Library.");
     } catch (e: any) {
       setStatus(e?.message || "Save failed");
@@ -153,7 +224,7 @@ export default function GeneratorPage() {
     setBusy(true);
 
     const variations = [
-      "Angle: practical step-by-step guide. Use Singapore/Malaysia examples if relevant. Keep it grounded and actionable.",
+      "Angle: practical step-by-step guide. Use local examples if relevant. Keep it grounded and actionable.",
       "Angle: common mistakes + fixes. Include realistic constraints and trade-offs. Keep tone calm and direct.",
       "Angle: FAQ-first article. Start with the biggest question and build from there. Add a short checklist near the end.",
       "Angle: executive-friendly playbook. Short sections, crisp explanations, minimal fluff, clear next steps.",
@@ -162,13 +233,17 @@ export default function GeneratorPage() {
 
     try {
       if (!canGenerate()) {
-        setStatus("No keyword data found. Go to Keywords and generate first.");
+        setStatus("No topic or keyword session found. Go to Site or Keywords first.");
+        return;
+      }
+
+      if (mode === "addon-beta") {
+        setStatus("Generate 5 drafts is only available in Standard mode for now.");
         return;
       }
 
       const newIds: string[] = [];
 
-      // Sequential (safer for rate limits and debugging)
       for (let i = 0; i < 5; i++) {
         setStatus(`Generating draft ${i + 1}/5...`);
         const d = await generateOne(variations[i]);
@@ -176,7 +251,6 @@ export default function GeneratorPage() {
         const id = await saveDraftToLibrary(d);
         if (id) newIds.push(id);
 
-        // Update editor with the latest generated draft (so user sees something)
         setTitle(d.title);
         setExcerpt(d.excerpt);
         setContentMd(d.content_md);
@@ -201,12 +275,78 @@ export default function GeneratorPage() {
     <main style={{ padding: 24 }}>
       <h1>Generator</h1>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => setMode("standard")}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #ccc",
+            background: mode === "standard" ? "#111" : "#fff",
+            color: mode === "standard" ? "#fff" : "#111",
+          }}
+        >
+          Standard
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMode("addon-beta")}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #ccc",
+            background: mode === "addon-beta" ? "#111" : "#fff",
+            color: mode === "addon-beta" ? "#fff" : "#111",
+          }}
+        >
+          Add-on (Beta)
+        </button>
+      </div>
+
+      {mode === "addon-beta" && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 8 }}>Content Type</label>
+          <select
+            value={profile}
+            onChange={(e) => setProfile(e.target.value as AddonProfile)}
+            style={{ padding: "8px 12px", borderRadius: 8, minWidth: 240 }}
+          >
+            <option value="strategic-article">Strategic Article</option>
+            <option value="authority-blog">Authority Blog</option>
+            <option value="seo-faq">SEO + FAQ</option>
+            <option value="conversion-article">Conversion Article</option>
+          </select>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gap: 12, maxWidth: 980, marginBottom: 16 }}>
+        <label>
+          Selected Topic
+          <input
+            value={topicInput}
+            onChange={(e) => setTopicInput(e.target.value)}
+            placeholder="Choose a topic from Site, or type one here"
+            style={{ width: "100%", padding: 10, marginTop: 6 }}
+          />
+        </label>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          marginBottom: 16,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <button onClick={autoGenerateOneToEditor} disabled={busy}>
           Auto-generate to Editor
         </button>
 
-        <button onClick={generate5AndAutoSave} disabled={busy}>
+        <button onClick={generate5AndAutoSave} disabled={busy || mode === "addon-beta"}>
           Generate 5 drafts + Auto-save
         </button>
 
@@ -222,8 +362,15 @@ export default function GeneratorPage() {
       </div>
 
       {!canGenerate() && (
-        <div style={{ marginBottom: 16, padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
-          No keyword session found yet. Go to <strong>Keywords</strong>, generate once, then return here.
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            border: "1px solid #eee",
+            borderRadius: 10,
+          }}
+        >
+          No topic or keyword session found yet. Go to <strong>Site</strong> or <strong>Keywords</strong> first.
         </div>
       )}
 
@@ -232,6 +379,90 @@ export default function GeneratorPage() {
           Recently saved IDs: {savedIds.slice(0, 5).join(", ")}
         </div>
       )}
+
+      {mode === "addon-beta" && addonResult?.blogTitle ? (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab("blog")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                background: activeTab === "blog" ? "#111" : "#fff",
+                color: activeTab === "blog" ? "#fff" : "#111",
+              }}
+            >
+              Blog
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("seo")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                background: activeTab === "seo" ? "#111" : "#fff",
+                color: activeTab === "seo" ? "#fff" : "#111",
+              }}
+            >
+              SEO
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("faq")}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
+                background: activeTab === "faq" ? "#111" : "#fff",
+                color: activeTab === "faq" ? "#fff" : "#111",
+              }}
+            >
+              FAQ
+            </button>
+          </div>
+
+          {activeTab === "blog" && (
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
+              <h2>{addonResult.blogTitle}</h2>
+              <div dangerouslySetInnerHTML={{ __html: addonResult.blogHtml }} />
+              <p style={{ marginTop: 16 }}>
+                <strong>CTA:</strong> {addonResult.cta}
+              </p>
+            </div>
+          )}
+
+          {activeTab === "seo" && (
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
+              <p>
+                <strong>SEO Title:</strong> {addonResult.seoTitle}
+              </p>
+              <p>
+                <strong>Meta Description:</strong> {addonResult.metaDescription}
+              </p>
+            </div>
+          )}
+
+          {activeTab === "faq" && (
+            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
+              {addonResult.faqs?.length ? (
+                addonResult.faqs.map((faq, i) => (
+                  <div key={i} style={{ marginBottom: 16 }}>
+                    <strong>{faq.question}</strong>
+                    <p>{faq.answer}</p>
+                  </div>
+                ))
+              ) : (
+                <p>No FAQ entries returned.</p>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gap: 12, maxWidth: 980 }}>
         <label>
@@ -253,7 +484,7 @@ export default function GeneratorPage() {
         </label>
 
         <label>
-          Content (Markdown)
+          Content (Markdown / HTML)
           <textarea
             value={contentMd}
             onChange={(e) => setContentMd(e.target.value)}
@@ -262,7 +493,8 @@ export default function GeneratorPage() {
               width: "100%",
               padding: 10,
               marginTop: 6,
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontFamily:
+                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
             }}
           />
         </label>
