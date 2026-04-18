@@ -9,7 +9,12 @@ type Profile = {
   audiences: string[];
   markets: string[];
   topics: string[];
-  competitors: { name: string; url: string; confidence: "low" | "medium" | "high"; note: string }[];
+  competitors: {
+    name: string;
+    url: string;
+    confidence: "low" | "medium" | "high";
+    note: string;
+  }[];
   needsClarification: boolean;
   suggestedPromptQuestions: string[];
 };
@@ -40,10 +45,16 @@ type TrendCard = {
 
 const SITE_PROFILE_KEY = "agseo:siteProfile";
 
-function confidenceColor(confidence: TrendCard["confidence"]) {
-  if (confidence === "high") return "#166534";
-  if (confidence === "medium") return "#a16207";
-  return "#6b7280";
+function getConfidenceClasses(confidence: TrendCard["confidence"]) {
+  if (confidence === "high") {
+    return "border-[#85ecb7] bg-[#85ecb7]/20 text-[#213151]";
+  }
+
+  if (confidence === "medium") {
+    return "border-[#c9937d] bg-[#c9937d]/20 text-[#213151]";
+  }
+
+  return "border-[#dfe5e4] bg-[#eef5f4]/20 text-[#213151]";
 }
 
 export default function TrendsPage() {
@@ -113,7 +124,9 @@ export default function TrendsPage() {
       }
 
       if (!localProfile) {
-        setError("No site profile found. Go to Site Setup, click Analyze site, then return here.");
+        setError(
+          "No site profile found. Go to Site Setup, click Analyze site, then return here."
+        );
         setTrends([]);
         setProfile(null);
         setCounts(null);
@@ -191,166 +204,240 @@ export default function TrendsPage() {
   }
 
   return (
-    <main style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Trends</h1>
-          <p style={{ marginTop: 8, opacity: 0.8 }}>
-            Opportunity radar built from internal + external signals.
-          </p>
-        </div>
+    <main className="min-h-screen bg-[#213151] px-6 py-6 text-[#eef5f4] md:px-8 lg:px-10">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#58739c] to-[#213152] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] md:p-8">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-3 inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-[#eef5f4]/80">
+                Opportunity Radar
+              </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={refreshNow} disabled={loading || refreshing}>
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-      </div>
+              <h1 className="text-3xl font-semibold tracking-tight text-[#eef5f4] md:text-4xl">
+                Trends
+              </h1>
 
-      {debugSource ? (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 10,
-            border: "1px solid #e5e7eb",
-            borderRadius: 12,
-            fontSize: 13,
-            opacity: 0.85,
-          }}
-        >
-          {debugSource}
-        </div>
-      ) : null}
-
-      {profile ? (
-        <div
-          style={{
-            marginBottom: 18,
-            padding: 14,
-            border: "1px solid #eee",
-            borderRadius: 12,
-            maxWidth: 1100,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Profile Summary</div>
-          <div style={{ fontSize: 14, opacity: 0.9 }}>
-            <strong>Industry:</strong> {profile.industry || "—"}
-          </div>
-          <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>
-            <strong>Audiences:</strong> {(profile.audiences || []).join(", ") || "—"}
-          </div>
-          <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>
-            <strong>Markets:</strong> {(profile.markets || []).join(", ") || "—"}
-          </div>
-          {selectedTopicHint ? (
-            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
-              <strong>Current selected topic bias:</strong> {selectedTopicHint}
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#eef5f4]/80 md:text-base">
+                Opportunity radar built from internal, news, and Google Trends
+                signals. Use this page to spot timely topics and push them
+                directly into the Generator.
+              </p>
             </div>
-          ) : null}
 
-          {counts ? (
-            <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
-              <strong>Signals:</strong> internal {counts.internal} · news {counts.news} · google {counts.google} · total {counts.total}
+            <div className="flex shrink-0 flex-wrap gap-3">
+              <button
+                onClick={refreshNow}
+                disabled={loading || refreshing}
+                className="inline-flex items-center justify-center rounded-xl border border-[#eef5f4]/20 bg-[#eef5f4] px-4 py-2.5 text-sm font-semibold text-[#213151] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {refreshing ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
-          ) : null}
-        </div>
-      ) : null}
+          </div>
+        </section>
 
-      {error ? (
-        <div
-          style={{
-            padding: 12,
-            border: "1px solid #f3d2d2",
-            borderRadius: 12,
-            color: "crimson",
-            marginBottom: 16,
-          }}
-        >
-          {error}
-        </div>
-      ) : null}
+        {debugSource ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#eef5f4]/75">
+            {debugSource}
+          </div>
+        ) : null}
 
-      {loading ? (
-        <div style={{ opacity: 0.8 }}>Loading trends...</div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gap: 14,
-            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-            maxWidth: 1200,
-          }}
-        >
-          {trends.map((trend) => (
-            <article
-              key={trend.id}
-              style={{
-                border: "1px solid #eee",
-                borderRadius: 14,
-                padding: 16,
-                background: "#fff",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-                <strong style={{ lineHeight: 1.35 }}>{trend.title}</strong>
-                <span
-                  style={{
-                    color: confidenceColor(trend.confidence),
-                    fontSize: 13,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {trend.confidence}
-                </span>
+        {profile ? (
+          <section className="rounded-3xl border border-white/10 bg-[#58739c] p-6 text-[#213151] shadow-[0_12px_40px_rgba(0,0,0,0.18)]">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold">Profile Summary</h2>
+                <p className="mt-1 text-sm text-[#213151]/75">
+                  These settings are shaping the opportunities shown below.
+                </p>
               </div>
 
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
-                Source: {trend.sourceLabel}
+              {counts ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-[#213151]/60">
+                      Internal
+                    </div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {counts.internal}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-[#213151]/60">
+                      News
+                    </div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {counts.news}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-[#213151]/60">
+                      Google
+                    </div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {counts.google}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-[#213151]/10 bg-[#213151] px-4 py-3 text-[#eef5f4]">
+                    <div className="text-xs uppercase tracking-wide text-[#eef5f4]/65">
+                      Total
+                    </div>
+                    <div className="mt-1 text-2xl font-semibold">
+                      {counts.total}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                  Industry
+                </div>
+                <div className="mt-2 text-sm font-medium text-[#213151]">
+                  {profile.industry || "—"}
+                </div>
               </div>
 
-              <div style={{ fontSize: 14, marginBottom: 8 }}>
-                <strong>Why it matters:</strong> {trend.whyItMatters}
+              <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                  Audiences
+                </div>
+                <div className="mt-2 text-sm leading-6 text-[#213151]">
+                  {(profile.audiences || []).join(", ") || "—"}
+                </div>
               </div>
 
-              <div style={{ fontSize: 14, marginBottom: 8 }}>
-                <strong>Suggested angle:</strong> {trend.suggestedAngle}
+              <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                  Markets
+                </div>
+                <div className="mt-2 text-sm leading-6 text-[#213151]">
+                  {(profile.markets || []).join(", ") || "—"}
+                </div>
               </div>
 
-              <div style={{ fontSize: 14, marginBottom: 4 }}>
-                <strong>Audience:</strong> {trend.audience}
+              <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/55 p-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                  Current topic bias
+                </div>
+                <div className="mt-2 text-sm leading-6 text-[#213151]">
+                  {selectedTopicHint || "—"}
+                </div>
               </div>
+            </div>
+          </section>
+        ) : null}
 
-              <div style={{ fontSize: 14, marginBottom: 14 }}>
-                <strong>Region:</strong> {trend.region}
+        {error ? (
+          <div className="rounded-2xl border border-[#e76660]/40 bg-[#e76660]/10 px-4 py-3 text-sm text-[#eef5f4]">
+            {error}
+          </div>
+        ) : null}
+
+        {loading ? (
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 text-sm text-[#eef5f4]/80">
+            Loading trends...
+          </section>
+        ) : (
+          <section>
+            {trends.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-white/15 bg-white/5 p-10 text-center text-[#eef5f4]/75">
+                No trends available yet.
               </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => useTrendInGenerator(trend)}>
-                  Use in Generator
-                </button>
-
-                {trend.url ? (
-                  <a
-                    href={trend.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: "inline-block",
-                      padding: "6px 10px",
-                      border: "1px solid #ddd",
-                      borderRadius: 8,
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
+            ) : (
+              <div className="grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+                {trends.map((trend) => (
+                  <article
+                    key={trend.id}
+                    className="flex h-full flex-col rounded-3xl border border-[#213151]/15 bg-[#58739c] p-6 text-[#213151] shadow-[0_14px_40px_rgba(0,0,0,0.18)]"
                   >
-                    Open source
-                  </a>
-                ) : null}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#213151]/60">
+                          {trend.sourceLabel}
+                        </p>
+                        <h3 className="mt-2 text-xl font-semibold leading-tight">
+                          {trend.title}
+                        </h3>
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${getConfidenceClasses(
+                          trend.confidence
+                        )}`}
+                      >
+                        {trend.confidence}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 space-y-4">
+                      <div className="rounded-2xl bg-[#eef5f4]/55 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                          Why it matters
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[#213151]">
+                          {trend.whyItMatters}
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl bg-[#eef5f4]/55 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                          Suggested angle
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[#213151]">
+                          {trend.suggestedAngle}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/40 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                          Audience
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-[#213151]">
+                          {trend.audience || "—"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-[#213151]/10 bg-[#eef5f4]/40 p-4">
+                        <div className="text-xs font-medium uppercase tracking-wide text-[#213151]/60">
+                          Region
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-[#213151]">
+                          {trend.region || "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <button
+                        onClick={() => useTrendInGenerator(trend)}
+                        className="inline-flex items-center justify-center rounded-xl bg-[#213151] px-4 py-2.5 text-sm font-semibold text-[#eef5f4] transition hover:opacity-90"
+                      >
+                        Use in Generator
+                      </button>
+
+                      {trend.url ? (
+                        <a
+                          href={trend.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center rounded-xl border border-[#213151]/15 bg-[#eef5f4]/60 px-4 py-2.5 text-sm font-semibold text-[#213151] transition hover:bg-[#eef5f4]"
+                        >
+                          Open source
+                        </a>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
               </div>
-            </article>
-          ))}
-        </div>
-      )}
+            )}
+          </section>
+        )}
+      </div>
     </main>
   );
 }
