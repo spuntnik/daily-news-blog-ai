@@ -34,7 +34,7 @@ export default async function ProtectedLayout({
 
         <nav style={{ display: "grid", gap: 10 }}>
           <Link href="/dashboard">Dashboard</Link>
-          <Link href="/generator">Generator</Link>
+          <Link href="/generator">Blog Generator</Link>
           <Link href="/keywords">Keywords</Link>
           <Link href="/trends">Trends</Link>
           <Link href="/library">Library</Link>

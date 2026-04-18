@@ -1,4 +1,3 @@
-// apps/web/src/app/(protected)/generator/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +7,7 @@ import type { AddonProfile, GeneratorMode } from "../../../lib/addon/types";
 type KwState = {
   topic?: string;
   selectedTopic?: string;
+  selectedKeywords?: string[];
   audience?: string;
   region?: string;
   seo?: any;
@@ -20,6 +20,7 @@ type Generated = {
   title: string;
   excerpt: string;
   content_md: string;
+  addon?: AddonGenerated | null;
 };
 
 type AddonGenerated = {
@@ -36,6 +37,7 @@ export default function GeneratorPage() {
 
   const [kwState, setKwState] = useState<KwState | null>(null);
   const [topicInput, setTopicInput] = useState("");
+  const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
 
   const [mode, setMode] = useState<GeneratorMode>("standard");
   const [profile, setProfile] = useState<AddonProfile>("strategic-article");
@@ -58,15 +60,27 @@ export default function GeneratorPage() {
       if (!raw) {
         setKwState(null);
         setTopicInput("");
+        setSelectedKeywords([]);
         return;
       }
 
       const parsed = JSON.parse(raw);
+      const incomingSelected = Array.isArray(parsed.selectedKeywords)
+        ? parsed.selectedKeywords.slice(0, 5)
+        : [];
+
       setKwState(parsed);
-      setTopicInput(parsed.selectedTopic || parsed.topic || "");
+      setSelectedKeywords(incomingSelected);
+      setTopicInput(
+        parsed.selectedTopic ||
+          incomingSelected[0] ||
+          parsed.topic ||
+          ""
+      );
     } catch {
       setKwState(null);
       setTopicInput("");
+      setSelectedKeywords([]);
     }
   }, []);
 
@@ -74,8 +88,13 @@ export default function GeneratorPage() {
     return !!topicInput && !!kwState?.seo && !!kwState?.geo && !!kwState?.aeo;
   }
 
-  async function generateOne(variation_hint?: string): Promise<Generated> {
-    if (!topicInput) {
+  async function generateOne(
+    variation_hint?: string,
+    explicitTopic?: string
+  ): Promise<Generated> {
+    const activeTopic = explicitTopic || topicInput;
+
+    if (!activeTopic) {
       throw new Error("No topic found. Go to Site or Keywords and select a topic first.");
     }
 
@@ -85,12 +104,13 @@ export default function GeneratorPage() {
       body: JSON.stringify({
         mode,
         profile,
-        topic: topicInput,
+        topic: activeTopic,
         audience: kwState?.audience,
         region: kwState?.region,
         seo: kwState?.seo,
         geo: kwState?.geo,
         aeo: kwState?.aeo,
+        selectedKeywords,
         variation_hint: variation_hint || "",
       }),
     });
@@ -100,7 +120,7 @@ export default function GeneratorPage() {
 
     if (mode === "addon-beta") {
       const addonPayload: AddonGenerated = {
-        blogTitle: json.blogTitle || topicInput,
+        blogTitle: json.blogTitle || activeTopic,
         seoTitle: json.seoTitle || "",
         metaDescription: json.metaDescription || "",
         blogHtml: json.blogHtml || "",
@@ -115,21 +135,25 @@ export default function GeneratorPage() {
         title: addonPayload.blogTitle,
         excerpt: addonPayload.metaDescription || "",
         content_md: addonPayload.blogHtml || "",
+        addon: addonPayload,
       };
     }
 
     setAddonResult(null);
 
     return {
-      title: json.title || topicInput,
+      title: json.title || activeTopic,
       excerpt: json.excerpt || "",
       content_md: json.content_md || "",
+      addon: null,
     };
   }
 
   async function saveDraftToLibrary(d: Generated) {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) throw new Error("Not signed in.");
+
+    const addon = d.addon || null;
 
     const { data, error } = await supabase
       .from("blog_posts")
@@ -138,10 +162,11 @@ export default function GeneratorPage() {
         title: d.title,
         excerpt: d.excerpt,
         content_md: d.content_md,
-        content_html: mode === "addon-beta" ? addonResult?.blogHtml || null : null,
+        content_html: mode === "addon-beta" ? addon?.blogHtml || null : null,
         sources: {
           keywords_source: "agseo:keywords",
           topic: topicInput || null,
+          selectedKeywords,
           region: kwState?.region || null,
           savedAt: kwState?._savedAt || null,
           mode,
@@ -149,10 +174,10 @@ export default function GeneratorPage() {
           addon:
             mode === "addon-beta"
               ? {
-                  seoTitle: addonResult?.seoTitle || "",
-                  metaDescription: addonResult?.metaDescription || "",
-                  faqs: addonResult?.faqs || [],
-                  cta: addonResult?.cta || "",
+                  seoTitle: addon?.seoTitle || "",
+                  metaDescription: addon?.metaDescription || "",
+                  faqs: addon?.faqs || [],
+                  cta: addon?.cta || "",
                 }
               : null,
         },
@@ -189,8 +214,8 @@ export default function GeneratorPage() {
 
       if (mode === "addon-beta") {
         setStatus("Generated add-on content. Saving to Library...");
-        const id = await saveDraftToLibrary(d);
-        setStatus(id ? "Generated and auto-saved to Library." : "Generated and auto-saved to Library.");
+        await saveDraftToLibrary(d);
+        setStatus("Generated and auto-saved to Library.");
       } else {
         setStatus("Generated. Review, then Save draft to Library.");
       }
@@ -210,6 +235,7 @@ export default function GeneratorPage() {
         title,
         excerpt,
         content_md: contentMd,
+        addon: addonResult,
       });
       setStatus(id ? "Saved to Library." : "Saved to Library.");
     } catch (e: any) {
@@ -223,7 +249,7 @@ export default function GeneratorPage() {
     setStatus("Generating 5 drafts and saving to Library...");
     setBusy(true);
 
-    const variations = [
+    const fallbackVariations = [
       "Angle: practical step-by-step guide. Use local examples if relevant. Keep it grounded and actionable.",
       "Angle: common mistakes + fixes. Include realistic constraints and trade-offs. Keep tone calm and direct.",
       "Angle: FAQ-first article. Start with the biggest question and build from there. Add a short checklist near the end.",
@@ -237,17 +263,24 @@ export default function GeneratorPage() {
         return;
       }
 
-      if (mode === "addon-beta") {
-        setStatus("Generate 5 drafts is only available in Standard mode for now.");
-        return;
-      }
+      const topicsToUse =
+        selectedKeywords.length > 0
+          ? selectedKeywords.slice(0, 5)
+          : [topicInput];
 
       const newIds: string[] = [];
 
-      for (let i = 0; i < 5; i++) {
-        setStatus(`Generating draft ${i + 1}/5...`);
-        const d = await generateOne(variations[i]);
-        setStatus(`Saving draft ${i + 1}/5 to Library...`);
+      for (let i = 0; i < topicsToUse.length; i++) {
+        const activeTopic = topicsToUse[i];
+        const variation =
+          selectedKeywords.length > 0
+            ? `Focus on keyword: ${activeTopic}`
+            : fallbackVariations[i] || "";
+
+        setStatus(`Generating draft ${i + 1}/${topicsToUse.length}...`);
+        const d = await generateOne(variation, activeTopic);
+
+        setStatus(`Saving draft ${i + 1}/${topicsToUse.length} to Library...`);
         const id = await saveDraftToLibrary(d);
         if (id) newIds.push(id);
 
@@ -259,7 +292,7 @@ export default function GeneratorPage() {
       setSavedIds((prev) => [...newIds.reverse(), ...prev]);
       setLastSavedId(newIds[0] || null);
 
-      setStatus(`Done. Saved ${newIds.length}/5 drafts to Library.`);
+      setStatus(`Done. Saved ${newIds.length}/${topicsToUse.length} drafts to Library.`);
     } catch (e: any) {
       setStatus(e?.message || "Generate/save failed");
     } finally {
@@ -271,9 +304,27 @@ export default function GeneratorPage() {
     window.location.href = `/api/export-docx?id=${encodeURIComponent(postId)}`;
   }
 
+  function chooseKeyword(keyword: string) {
+    setTopicInput(keyword);
+    try {
+      const raw = localStorage.getItem("agseo:keywords");
+      const parsed = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(
+        "agseo:keywords",
+        JSON.stringify({
+          ...parsed,
+          selectedTopic: keyword,
+          selectedKeywords,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <main style={{ padding: 24 }}>
-      <h1>Generator</h1>
+      <h1>Blog Generator</h1>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <button
@@ -327,10 +378,44 @@ export default function GeneratorPage() {
           <input
             value={topicInput}
             onChange={(e) => setTopicInput(e.target.value)}
-            placeholder="Choose a topic from Site, or type one here"
+            placeholder="Choose a topic from Site, Keywords, or type one here"
             style={{ width: "100%", padding: 10, marginTop: 6 }}
           />
         </label>
+
+        {selectedKeywords.length > 0 && (
+          <div
+            style={{
+              padding: 12,
+              border: "1px solid #eee",
+              borderRadius: 10,
+              background: "#fafafa",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>
+              Selected keywords from Keywords page
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {selectedKeywords.map((keyword) => (
+                <button
+                  key={keyword}
+                  type="button"
+                  onClick={() => chooseKeyword(keyword)}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                    background: topicInput === keyword ? "#111" : "#fff",
+                    color: topicInput === keyword ? "#fff" : "#111",
+                    cursor: "pointer",
+                  }}
+                >
+                  {keyword}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div
@@ -346,7 +431,7 @@ export default function GeneratorPage() {
           Auto-generate to Editor
         </button>
 
-        <button onClick={generate5AndAutoSave} disabled={busy || mode === "addon-beta"}>
+        <button onClick={generate5AndAutoSave} disabled={busy}>
           Generate 5 drafts + Auto-save
         </button>
 
