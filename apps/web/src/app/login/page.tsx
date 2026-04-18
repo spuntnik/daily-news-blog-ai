@@ -24,9 +24,9 @@ export default function LoginPage() {
       setStatus(error.message);
       return;
     }
-    
-router.replace("/site");
-router.refresh();
+
+    router.replace("/site");
+    router.refresh();
   }
 
   return (

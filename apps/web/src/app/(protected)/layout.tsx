@@ -2,15 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "../../utils/supabase/server";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/generator", label: "Generator" },
-  { href: "/keywords", label: "Keywords" },
-  { href: "/trends", label: "Trends" },
-  { href: "/library", label: "Library" },
-  { href: "/settings", label: "Settings" },
-];
-
 export default async function ProtectedLayout({
   children,
 }: {
@@ -31,45 +22,36 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/80 p-6">
-        <div className="mb-8">
-          <div className="text-xl font-semibold tracking-tight">AG SEO Studio</div>
-          <p className="mt-2 text-sm text-slate-400">
-            Content intelligence dashboard
-          </p>
-        </div>
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      <aside
+        style={{
+          width: 240,
+          padding: 20,
+          borderRight: "1px solid #eee",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 16 }}>AG SEO Studio</div>
 
-        <nav className="grid gap-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-slate-300 no-underline transition hover:bg-slate-800 hover:text-white"
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav style={{ display: "grid", gap: 10 }}>
+          <Link href="/dashboard">Dashboard</Link>
+          <Link href="/generator">Generator</Link>
+          <Link href="/keywords">Keywords</Link>
+          <Link href="/trends">Trends</Link>
+          <Link href="/library">Library</Link>
+          <Link href="/settings">Settings</Link>
         </nav>
 
-        <div className="mt-10 rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm">
-          <div className="text-slate-400">Signed in as</div>
-          <div className="mt-1 break-words font-medium text-slate-200">
-            {user.email}
-          </div>
+        <div style={{ marginTop: 20, fontSize: 12, opacity: 0.8 }}>
+          Signed in as:
+          <div style={{ wordBreak: "break-word" }}>{user.email}</div>
         </div>
 
-        <form action={signOut} className="mt-4">
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white"
-          >
-            Logout
-          </button>
+        <form action={signOut} style={{ marginTop: 16 }}>
+          <button type="submit">Logout</button>
         </form>
       </aside>
 
-      <main className="flex-1 bg-slate-950 p-6 md:p-8">{children}</main>
+      <main style={{ flex: 1, padding: 24 }}>{children}</main>
     </div>
   );
 }
