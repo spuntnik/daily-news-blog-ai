@@ -17,6 +17,9 @@ type Profile = {
 type StoredKwState = {
   topic?: string;
   selectedTopic?: string;
+  selectedTopics?: string[];
+  selectedAudiences?: string[];
+  selectedMarkets?: string[];
   audience?: string;
   region?: string;
   seo?: any;
@@ -27,6 +30,24 @@ type StoredKwState = {
 
 const SITE_PROFILE_KEY = "agseo:siteProfile";
 
+type SiteSelections = {
+  selectedAudiences: string[];
+  selectedMarkets: string[];
+  selectedTopics: string[];
+};
+
+function normalizeList(items?: string[]) {
+  return Array.isArray(items) ? items.filter(Boolean) : [];
+}
+
+function buildDefaultSelections(profile: Profile | null): SiteSelections {
+  return {
+    selectedAudiences: profile?.audiences?.length ? [profile.audiences[0]] : [],
+    selectedMarkets: profile?.markets?.length ? [profile.markets[0]] : [],
+    selectedTopics: profile?.topics?.length ? [profile.topics[0]] : [],
+  };
+}
+
 export default function SitePage() {
   const router = useRouter();
 
@@ -34,17 +55,156 @@ export default function SitePage() {
   const [regionHint, setRegionHint] = useState("Singapore");
   const [extraContext, setExtraContext] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [selections, setSelections] = useState<SiteSelections>({
+    selectedAudiences: [],
+    selectedMarkets: [],
+    selectedTopics: [],
+  });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function persistProfileAndSelections(nextProfile: Profile | null, nextSelections: SiteSelections) {
+    if (!nextProfile) return;
+
+    const payload = {
+      ...nextProfile,
+      __uiSelections: nextSelections,
+    };
+
+    try {
+      localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+  }
+
+  function persistKeywordContext(nextSelections: SiteSelections, explicitTopic?: string) {
+    try {
+      const raw = localStorage.getItem("agseo:keywords");
+      let existing: StoredKwState = {};
+
+      if (raw) {
+        try {
+          existing = JSON.parse(raw);
+        } catch {
+          existing = {};
+        }
+      }
+
+      const selectedTopic =
+        explicitTopic ||
+        nextSelections.selectedTopics[0] ||
+        existing.selectedTopic ||
+        existing.topic ||
+        "";
+
+      const nextState: StoredKwState = {
+        ...existing,
+        topic: selectedTopic || existing.topic,
+        selectedTopic: selectedTopic || existing.selectedTopic,
+        selectedTopics: nextSelections.selectedTopics,
+        selectedAudiences: nextSelections.selectedAudiences,
+        selectedMarkets: nextSelections.selectedMarkets,
+        audience:
+          nextSelections.selectedAudiences[0] ||
+          existing.audience ||
+          profile?.audiences?.[0] ||
+          "general",
+        region:
+          nextSelections.selectedMarkets[0] ||
+          existing.region ||
+          regionHint ||
+          profile?.markets?.[0] ||
+          "global",
+        _savedAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem("agseo:keywords", JSON.stringify(nextState));
+    } catch {
+      // ignore
+    }
+  }
+
+  function hydrateSelectionsFromProfile(nextProfile: Profile | null) {
+    if (!nextProfile) {
+      setSelections({
+        selectedAudiences: [],
+        selectedMarkets: [],
+        selectedTopics: [],
+      });
+      return;
+    }
+
+    try {
+      const localRaw = localStorage.getItem(SITE_PROFILE_KEY);
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw) as any;
+        const saved = parsed?.__uiSelections;
+
+        if (saved) {
+          const nextSelections = {
+            selectedAudiences: normalizeList(saved.selectedAudiences).filter((x) =>
+              nextProfile.audiences.includes(x)
+            ),
+            selectedMarkets: normalizeList(saved.selectedMarkets).filter((x) =>
+              nextProfile.markets.includes(x)
+            ),
+            selectedTopics: normalizeList(saved.selectedTopics).filter((x) =>
+              nextProfile.topics.includes(x)
+            ),
+          };
+
+          const safeSelections = {
+            selectedAudiences:
+              nextSelections.selectedAudiences.length > 0
+                ? nextSelections.selectedAudiences
+                : buildDefaultSelections(nextProfile).selectedAudiences,
+            selectedMarkets:
+              nextSelections.selectedMarkets.length > 0
+                ? nextSelections.selectedMarkets
+                : buildDefaultSelections(nextProfile).selectedMarkets,
+            selectedTopics:
+              nextSelections.selectedTopics.length > 0
+                ? nextSelections.selectedTopics
+                : buildDefaultSelections(nextProfile).selectedTopics,
+          };
+
+          setSelections(safeSelections);
+          persistProfileAndSelections(nextProfile, safeSelections);
+          persistKeywordContext(safeSelections);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const defaults = buildDefaultSelections(nextProfile);
+    setSelections(defaults);
+    persistProfileAndSelections(nextProfile, defaults);
+    persistKeywordContext(defaults);
+  }
 
   useEffect(() => {
     (async () => {
       try {
         const localRaw = localStorage.getItem(SITE_PROFILE_KEY);
         if (localRaw) {
-          const localProfile = JSON.parse(localRaw) as Profile;
-          setProfile(localProfile);
+          const localProfile = JSON.parse(localRaw) as any;
+          const strippedProfile: Profile = {
+            siteUrl: localProfile.siteUrl,
+            industry: localProfile.industry,
+            audiences: localProfile.audiences || [],
+            markets: localProfile.markets || [],
+            topics: localProfile.topics || [],
+            competitors: localProfile.competitors || [],
+            needsClarification: !!localProfile.needsClarification,
+            suggestedPromptQuestions: localProfile.suggestedPromptQuestions || [],
+          };
+
+          setProfile(strippedProfile);
+          hydrateSelectionsFromProfile(strippedProfile);
         }
       } catch {
         // ignore local parse issues
@@ -56,23 +216,16 @@ export default function SitePage() {
 
         if (res.ok) {
           if (data?.siteUrl) setSiteUrl(data.siteUrl);
-          if (data?.profile) setProfile(data.profile);
+          if (data?.profile) {
+            setProfile(data.profile);
+            hydrateSelectionsFromProfile(data.profile);
+          }
         }
       } catch {
         // ignore backend load issues for now
       }
     })();
   }, []);
-
-  useEffect(() => {
-    try {
-      if (profile) {
-        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
-      }
-    } catch {
-      // ignore localStorage issues
-    }
-  }, [profile]);
 
   async function runAnalysis() {
     setLoading(true);
@@ -90,11 +243,10 @@ export default function SitePage() {
 
       setProfile(data.profile);
 
-      try {
-        localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(data.profile));
-      } catch {
-        // ignore
-      }
+      const defaults = buildDefaultSelections(data.profile);
+      setSelections(defaults);
+      persistProfileAndSelections(data.profile, defaults);
+      persistKeywordContext(defaults);
 
       try {
         await fetch("/api/site", {
@@ -121,11 +273,8 @@ export default function SitePage() {
 
     try {
       if (profile) {
-        try {
-          localStorage.setItem(SITE_PROFILE_KEY, JSON.stringify(profile));
-        } catch {
-          // ignore
-        }
+        persistProfileAndSelections(profile, selections);
+        persistKeywordContext(selections);
       }
 
       const res = await fetch("/api/site", {
@@ -146,32 +295,38 @@ export default function SitePage() {
   }
 
   function handleTopicClick(topic: string) {
-    try {
-      const raw = localStorage.getItem("agseo:keywords");
-      let existing: StoredKwState = {};
+    const nextSelections = {
+      ...selections,
+      selectedTopics: toggleSingleValue(selections.selectedTopics, topic),
+    };
 
-      if (raw) {
-        try {
-          existing = JSON.parse(raw);
-        } catch {
-          existing = {};
-        }
-      }
-
-      const nextState: StoredKwState = {
-        ...existing,
-        topic,
-        selectedTopic: topic,
-        audience: existing.audience || profile?.audiences?.[0] || "general",
-        region: existing.region || regionHint || profile?.markets?.[0] || "global",
-        _savedAt: new Date().toISOString(),
-      };
-
-      localStorage.setItem("agseo:keywords", JSON.stringify(nextState));
-      router.push("/generator");
-    } catch {
-      router.push("/generator");
+    setSelections(nextSelections);
+    if (profile) {
+      persistProfileAndSelections(profile, nextSelections);
     }
+    persistKeywordContext(nextSelections, topic);
+    router.push("/generator");
+  }
+
+  function handleSelectionChange(
+    key: keyof SiteSelections,
+    value: string,
+    mode: "single" | "multi"
+  ) {
+    const nextSelections: SiteSelections = {
+      ...selections,
+      [key]:
+        mode === "single"
+          ? toggleSingleValue(selections[key], value)
+          : toggleMultiValue(selections[key], value),
+    };
+
+    setSelections(nextSelections);
+
+    if (profile) {
+      persistProfileAndSelections(profile, nextSelections);
+    }
+    persistKeywordContext(nextSelections);
   }
 
   return (
@@ -259,11 +414,31 @@ export default function SitePage() {
           )}
 
           <div style={{ marginTop: 12, display: "grid", gap: 14 }}>
-            <Section title="Audiences" items={profile.audiences} />
-            <Section title="Markets" items={profile.markets} />
-            <ClickableTopicsSection
+            <SelectableSection
+              title="Audiences"
+              items={profile.audiences}
+              selectedItems={selections.selectedAudiences}
+              onToggle={(value) =>
+                handleSelectionChange("selectedAudiences", value, "multi")
+              }
+            />
+
+            <SelectableSection
+              title="Markets"
+              items={profile.markets}
+              selectedItems={selections.selectedMarkets}
+              onToggle={(value) =>
+                handleSelectionChange("selectedMarkets", value, "multi")
+              }
+            />
+
+            <SelectableTopicsSection
               title="Recommended Blog Topics"
               items={profile.topics}
+              selectedItems={selections.selectedTopics}
+              onToggle={(value) =>
+                handleSelectionChange("selectedTopics", value, "multi")
+              }
               onTopicClick={handleTopicClick}
             />
 
@@ -299,62 +474,126 @@ export default function SitePage() {
   );
 }
 
-function Section({ title, items }: { title: string; items: string[] }) {
+function toggleSingleValue(existing: string[], value: string) {
+  return existing.includes(value) ? existing : [value];
+}
+
+function toggleMultiValue(existing: string[], value: string) {
+  return existing.includes(value)
+    ? existing.filter((item) => item !== value)
+    : [...existing, value];
+}
+
+function SelectableSection({
+  title,
+  items,
+  selectedItems,
+  onToggle,
+}: {
+  title: string;
+  items: string[];
+  selectedItems: string[];
+  onToggle: (value: string) => void;
+}) {
   return (
     <div>
       <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {items.map((t, i) => (
-          <span
-            key={i}
-            style={{
-              border: "1px solid #eee",
-              borderRadius: 999,
-              padding: "6px 10px",
-              fontSize: 13,
-              opacity: 0.9,
-            }}
-          >
-            {t}
-          </span>
-        ))}
+        {items.map((t, i) => {
+          const selected = selectedItems.includes(t);
+
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onToggle(t)}
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: 999,
+                padding: "6px 10px",
+                fontSize: 13,
+                opacity: 0.95,
+                background: selected ? "#111" : "#fff",
+                color: selected ? "#fff" : "#111",
+                cursor: "pointer",
+              }}
+              title={selected ? "Selected" : "Click to select"}
+            >
+              {t}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function ClickableTopicsSection({
+function SelectableTopicsSection({
   title,
   items,
+  selectedItems,
+  onToggle,
   onTopicClick,
 }: {
   title: string;
   items: string[];
+  selectedItems: string[];
+  onToggle: (value: string) => void;
   onTopicClick: (topic: string) => void;
 }) {
   return (
     <div>
       <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {items.map((t, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => onTopicClick(t)}
-            style={{
-              border: "1px solid #eee",
-              borderRadius: 999,
-              padding: "6px 10px",
-              fontSize: 13,
-              opacity: 0.95,
-              background: "#fff",
-              cursor: "pointer",
-            }}
-            title={`Use "${t}" in Generator`}
-          >
-            {t}
-          </button>
-        ))}
+        {items.map((t, i) => {
+          const selected = selectedItems.includes(t);
+
+          return (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                border: "1px solid #eee",
+                borderRadius: 999,
+                overflow: "hidden",
+                background: "#fff",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => onToggle(t)}
+                style={{
+                  border: "none",
+                  borderRight: "1px solid #eee",
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  background: selected ? "#111" : "#fff",
+                  color: selected ? "#fff" : "#111",
+                  cursor: "pointer",
+                }}
+                title={selected ? "Selected" : "Click to select"}
+              >
+                {t}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onTopicClick(t)}
+                style={{
+                  border: "none",
+                  padding: "6px 10px",
+                  fontSize: 12,
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+                title={`Use "${t}" in Blog Generator`}
+              >
+                Use
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
