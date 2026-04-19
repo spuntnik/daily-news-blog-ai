@@ -9,47 +9,151 @@ type KwState = {
   selectedKeywords?: string[];
   selectedTopic?: string;
   topic?: string;
+  audience?: string;
+  region?: string;
 };
 
 export default function GeneratorPage() {
   const [kwState, setKwState] = useState<KwState | null>(null);
+  const [topicInput, setTopicInput] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("agseo:keywords");
       if (!raw) return;
-      setKwState(JSON.parse(raw));
+
+      const parsed = JSON.parse(raw);
+      setKwState(parsed);
+
+      setTopicInput(
+        parsed.selectedTopic ||
+        parsed.selectedTopics?.[0] ||
+        parsed.topic ||
+        ""
+      );
     } catch {
       setKwState(null);
     }
   }, []);
 
+  const audiences = kwState?.selectedAudiences || [];
+  const markets = kwState?.selectedMarkets || [];
+  const topics = kwState?.selectedTopics || [];
+  const keywords = kwState?.selectedKeywords || [];
+
+  async function generate() {
+    if (!topicInput) {
+      setStatus("No topic selected.");
+      return;
+    }
+
+    setBusy(true);
+    setStatus("Generating...");
+
+    try {
+      const res = await fetch("/api/generate-blog", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          topic: topicInput,
+          audience: audiences[0] || kwState?.audience,
+          region: markets[0] || kwState?.region,
+          selectedKeywords: keywords,
+          selectedTopics: topics,
+          context: {
+            audiences,
+            markets,
+            topics,
+          },
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to generate");
+      }
+
+      setStatus("Generated successfully.");
+    } catch (e: any) {
+      setStatus(e?.message || "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main style={{ padding: 24 }}>
       <h1>Blog Generator</h1>
 
+      {/* CONTEXT PANEL */}
       <div
         style={{
-          border: "2px solid red",
+          border: "1px solid #eee",
           borderRadius: 12,
           padding: 16,
-          marginTop: 16,
-          marginBottom: 16,
-          background: "#fff8f8",
+          marginBottom: 20,
+          background: "#fafafa",
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 10 }}>
-          Current Context TEST
+          Current Context
         </div>
 
-        <div><strong>Audiences:</strong> {kwState?.selectedAudiences?.join(", ") || "—"}</div>
-        <div><strong>Markets:</strong> {kwState?.selectedMarkets?.join(", ") || "—"}</div>
-        <div><strong>Topics:</strong> {kwState?.selectedTopics?.join(", ") || "—"}</div>
-        <div><strong>Keywords:</strong> {kwState?.selectedKeywords?.join(", ") || "—"}</div>
-        <div><strong>Selected Topic:</strong> {kwState?.selectedTopic || kwState?.topic || "—"}</div>
+        <ContextRow label="Audiences" values={audiences} />
+        <ContextRow label="Markets" values={markets} />
+        <ContextRow label="Topics" values={topics} />
+        <ContextRow label="Keywords" values={keywords} />
       </div>
 
-      <p>If you can see this red box, you are editing the correct Generator file.</p>
+      {/* TOPIC */}
+      <div style={{ marginBottom: 16 }}>
+        <label>
+          Topic
+          <input
+            value={topicInput}
+            onChange={(e) => setTopicInput(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginTop: 6,
+            }}
+          />
+        </label>
+      </div>
+
+      {/* ACTIONS */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={generate} disabled={busy}>
+          {busy ? "Generating..." : "Generate Blog"}
+        </button>
+      </div>
+
+      {/* STATUS */}
+      {status && (
+        <div style={{ marginTop: 12, opacity: 0.8 }}>
+          {status}
+        </div>
+      )}
     </main>
+  );
+}
+
+function ContextRow({
+  label,
+  values,
+}: {
+  label: string;
+  values: string[];
+}) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <strong>{label}:</strong>{" "}
+      {values.length ? values.join(", ") : "—"}
+    </div>
   );
 }
