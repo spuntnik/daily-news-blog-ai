@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Profile = {
   siteUrl: string;
@@ -16,11 +16,20 @@ type Profile = {
   }[];
   needsClarification: boolean;
   suggestedPromptQuestions: string[];
+  __uiSelections?: {
+    selectedAudiences?: string[];
+    selectedMarkets?: string[];
+    selectedTopics?: string[];
+  };
 };
 
 type StoredKwState = {
   topic?: string;
   selectedTopic?: string;
+  selectedKeywords?: string[];
+  selectedAudiences?: string[];
+  selectedMarkets?: string[];
+  selectedTopics?: string[];
   audience?: string;
   region?: string;
   seo?: any;
@@ -67,10 +76,156 @@ function getConfidenceStyles(confidence?: "low" | "medium" | "high") {
   };
 }
 
+function getRelevanceColor(score: number) {
+  if (score >= 75) return "#F57513";
+  if (score >= 45) return "#F54927";
+  return "#E97451";
+}
+
+function scoreToLabel(score: number) {
+  if (score >= 75) return "High relevance";
+  if (score >= 45) return "Medium relevance";
+  return "Low relevance";
+}
+
+function buildSearchText(trend: TrendCard) {
+  return [
+    trend.title,
+    trend.whyItMatters,
+    trend.suggestedAngle,
+    trend.audience,
+    trend.region,
+    trend.sourceLabel,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function matchesAny(searchText: string, items: string[]) {
+  if (!items.length) return 0;
+
+  let hits = 0;
+
+  for (const item of items) {
+    const needle = item.trim().toLowerCase();
+    if (needle && searchText.includes(needle)) {
+      hits += 1;
+    }
+  }
+
+  return hits;
+}
+
+function computeRelevanceScore(
+  trend: TrendCard,
+  selectedAudiences: string[],
+  selectedMarkets: string[],
+  selectedTopics: string[]
+) {
+  const searchText = buildSearchText(trend);
+
+  const audienceHits = matchesAny(searchText, selectedAudiences);
+  const marketHits = matchesAny(searchText, selectedMarkets);
+  const topicHits = matchesAny(searchText, selectedTopics);
+
+  let score = 20;
+
+  score += audienceHits * 18;
+  score += marketHits * 20;
+  score += topicHits * 22;
+
+  if (
+    trend.audience &&
+    selectedAudiences.some(
+      (a) => a.toLowerCase() === String(trend.audience).toLowerCase()
+    )
+  ) {
+    score += 10;
+  }
+
+  if (
+    trend.region &&
+    selectedMarkets.some(
+      (m) => m.toLowerCase() === String(trend.region).toLowerCase()
+    )
+  ) {
+    score += 10;
+  }
+
+  if (trend.confidence === "high") score += 8;
+  if (trend.confidence === "medium") score += 4;
+
+  return Math.max(8, Math.min(100, score));
+}
+
+function MiniPie({
+  score,
+  size = 40,
+}: {
+  score: number;
+  size?: number;
+}) {
+  const stroke = 5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (score / 100) * circumference;
+  const color = getRelevanceColor(score);
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        position: "relative",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+      title={`${score}% relevance`}
+    >
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${progress} ${circumference - progress}`}
+        />
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "#111",
+        }}
+      >
+        {score}%
+      </div>
+    </div>
+  );
+}
+
 export default function TrendsPage() {
   const [loading, setLoading] = useState(true);
   const [trends, setTrends] = useState<TrendCard[]>([]);
   const [error, setError] = useState("");
+
+  const [selectedAudiences, setSelectedAudiences] = useState<string[]>([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -109,6 +264,37 @@ export default function TrendsPage() {
           }
         }
 
+        const nextAudiences =
+          kwState.selectedAudiences?.length
+            ? kwState.selectedAudiences
+            : profile?.__uiSelections?.selectedAudiences?.length
+            ? profile.__uiSelections.selectedAudiences
+            : profile?.audiences?.length
+            ? [profile.audiences[0]]
+            : [];
+
+        const nextMarkets =
+          kwState.selectedMarkets?.length
+            ? kwState.selectedMarkets
+            : profile?.__uiSelections?.selectedMarkets?.length
+            ? profile.__uiSelections.selectedMarkets
+            : profile?.markets?.length
+            ? [profile.markets[0]]
+            : [];
+
+        const nextTopics =
+          kwState.selectedTopics?.length
+            ? kwState.selectedTopics
+            : profile?.__uiSelections?.selectedTopics?.length
+            ? profile.__uiSelections.selectedTopics
+            : profile?.topics?.length
+            ? [profile.topics[0]]
+            : [];
+
+        setSelectedAudiences(nextAudiences);
+        setSelectedMarkets(nextMarkets);
+        setSelectedTopics(nextTopics);
+
         if (!profile) {
           setError(
             "No site profile found. Go to Site Setup, click Analyze site, then return here."
@@ -145,6 +331,22 @@ export default function TrendsPage() {
     load();
   }, []);
 
+  const scoredTrends = useMemo(() => {
+    return trends.map((trend) => {
+      const relevanceScore = computeRelevanceScore(
+        trend,
+        selectedAudiences,
+        selectedMarkets,
+        selectedTopics
+      );
+
+      return {
+        ...trend,
+        relevanceScore,
+      };
+    });
+  }, [trends, selectedAudiences, selectedMarkets, selectedTopics]);
+
   return (
     <main>
       <h1 style={{ marginTop: 0, marginBottom: 12 }}>Trends</h1>
@@ -152,13 +354,37 @@ export default function TrendsPage() {
         Opportunity radar built from internal, news, and Google Trends signals.
       </p>
 
+      <div
+        style={{
+          border: "1px solid #eee",
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 20,
+          background: "#fafafa",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Selected Context</div>
+        <div style={{ marginBottom: 8 }}>
+          <strong>Audiences:</strong>{" "}
+          {selectedAudiences.length ? selectedAudiences.join(", ") : "—"}
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          <strong>Markets:</strong>{" "}
+          {selectedMarkets.length ? selectedMarkets.join(", ") : "—"}
+        </div>
+        <div>
+          <strong>Blog Topics:</strong>{" "}
+          {selectedTopics.length ? selectedTopics.join(", ") : "—"}
+        </div>
+      </div>
+
       {error ? (
         <p style={{ color: "crimson", marginBottom: 16 }}>{error}</p>
       ) : null}
 
       {loading ? (
         <p>Loading...</p>
-      ) : trends.length === 0 ? (
+      ) : scoredTrends.length === 0 ? (
         <p>No trends available yet.</p>
       ) : (
         <div
@@ -169,8 +395,9 @@ export default function TrendsPage() {
             alignItems: "start",
           }}
         >
-          {trends.map((trend) => {
+          {scoredTrends.map((trend) => {
             const badgeStyle = getConfidenceStyles(trend.confidence);
+            const relevanceColor = getRelevanceColor(trend.relevanceScore);
 
             return (
               <div
@@ -196,24 +423,44 @@ export default function TrendsPage() {
                       margin: 0,
                       lineHeight: 1.35,
                       fontSize: 18,
+                      flex: 1,
                     }}
                   >
                     {trend.title}
                   </h3>
 
-                  <span
-                    style={{
-                      ...badgeStyle,
-                      borderRadius: 999,
-                      padding: "4px 10px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textTransform: "capitalize",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {trend.confidence || "low"}
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        borderRadius: 999,
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textTransform: "capitalize",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {trend.confidence || "low"}
+                    </span>
+
+                    <MiniPie score={trend.relevanceScore} />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginBottom: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: relevanceColor,
+                  }}
+                >
+                  <span>Relevance:</span>
+                  <span>{scoreToLabel(trend.relevanceScore)}</span>
                 </div>
 
                 {trend.sourceLabel ? (
