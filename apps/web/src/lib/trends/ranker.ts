@@ -61,8 +61,39 @@ export function scoreSignal(signal: TrendSignal) {
   return base + sourceBoost - lowRelevancePenalty - genericMassTrendPenalty;
 }
 
+function isHardIrrelevant(signal: TrendSignal) {
+  const t = signal.topic.toLowerCase();
+
+  const blocked = [
+    "wrestlemania",
+    "vs ",
+    "premier league",
+    "nba",
+    "nfl",
+    "football",
+    "soccer",
+    "cricket",
+    "tennis",
+    "formula 1",
+    "celebrity",
+    "movie",
+    "movies",
+    "concert",
+    "award",
+    "awards",
+    "box office",
+  ];
+
+  return blocked.some((term) => t.includes(term));
+}
+
 export function rankSignals(signals: TrendSignal[]) {
   return [...signals]
-    .filter((signal) => signal.relevanceScore >= 35)
+    // REMOVE obvious irrelevant content completely
+    .filter((signal) => !isHardIrrelevant(signal))
+
+    // keep only meaningful business signals
+    .filter((signal) => signal.relevanceScore >= 40)
+
     .sort((a, b) => scoreSignal(b) - scoreSignal(a));
 }
