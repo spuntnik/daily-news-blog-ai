@@ -8,7 +8,6 @@ type BlogPost = {
   id: string;
   title: string;
   excerpt?: string | null;
-  content?: string | null;
   status: string;
   created_at: string;
   updated_at?: string;
@@ -152,7 +151,7 @@ export default function BacklinksPage() {
       const [postsRes, projectsRes, oppsRes, outreachRes, linksRes] = await Promise.all([
         supabase
           .from("blog_posts")
-          .select("*")
+          .select("id,title,excerpt,status,created_at,updated_at")
           .order("created_at", { ascending: false }),
 
         supabase
@@ -221,13 +220,19 @@ export default function BacklinksPage() {
   }
 
   function calculateLinkWorthiness(post: BlogPost) {
-    const text = `${post.title || ""} ${post.excerpt || ""} ${post.content || ""}`;
+    const text = `${post.title || ""} ${post.excerpt || ""}`;
     let score = 30;
 
-    if (text.length > 1000) score += 15;
-    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) score += 20;
-    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) score += 10;
-    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) score += 15;
+    if (text.length > 300) score += 15;
+    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) {
+      score += 20;
+    }
+    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) {
+      score += 10;
+    }
+    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) {
+      score += 15;
+    }
     if ((post.excerpt || "").length > 80) score += 10;
 
     return Math.min(score, 100);
@@ -254,6 +259,7 @@ export default function BacklinksPage() {
         .from("backlink_projects")
         .insert({
           blog_post_id: selectedPost.id,
+          blog_draft_id: null,
           user_id: user.id,
           status: "not_prepared",
           link_worthy_score: calculateLinkWorthiness(selectedPost),
@@ -517,8 +523,7 @@ export default function BacklinksPage() {
         page_url: "",
         relevance_reason:
           "This post is leadership-oriented and may fit executive development or management resources.",
-        outreach_angle:
-          "Lead with executive relevance and practical takeaways.",
+        outreach_angle: "Lead with executive relevance and practical takeaways.",
       });
     }
 
@@ -541,8 +546,7 @@ export default function BacklinksPage() {
         page_url: "",
         relevance_reason:
           "The content aligns with digital growth, AI, and practical strategy topics.",
-        outreach_angle:
-          "Present it as a practical implementation guide.",
+        outreach_angle: "Present it as a practical implementation guide.",
       });
     }
 
@@ -552,8 +556,7 @@ export default function BacklinksPage() {
       page_url: "",
       relevance_reason:
         "This post appears educational and suitable for roundup or resource pages.",
-      outreach_angle:
-        "Offer the article as a concise resource with direct reader value.",
+      outreach_angle: "Offer the article as a concise resource with direct reader value.",
     });
 
     return suggestions.slice(0, 5);
@@ -626,7 +629,9 @@ export default function BacklinksPage() {
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {project ? pill(project.status) : null}
-                    {project ? <span style={{ fontSize: 12 }}>Score: {project.link_worthy_score}</span> : null}
+                    {project ? (
+                      <span style={{ fontSize: 12 }}>Score: {project.link_worthy_score}</span>
+                    ) : null}
                   </div>
                 </button>
               );
