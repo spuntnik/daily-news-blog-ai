@@ -38,6 +38,7 @@ export default async function ProtectedLayout({
           <Link href="/keywords">Keywords</Link>
           <Link href="/trends">Trends</Link>
           <Link href="/library">Library</Link>
+          <Link href="/backlinks">Backlinks</Link>
           <Link href="/settings">Settings</Link>
         </nav>
 
