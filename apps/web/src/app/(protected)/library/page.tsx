@@ -1,4 +1,3 @@
-// apps/web/src/app/(protected)/library/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +29,17 @@ type PostRow = {
   sources: any;
 };
 
+type BacklinkProject = {
+  id: string;
+  blog_draft_id: string;
+  user_id: string;
+  status: string;
+  link_worthy_score: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const PIPELINE: Stage[] = ["draft", "review", "scheduled", "published"];
 
 function ColumnDropZone({
@@ -56,7 +66,9 @@ function ColumnDropZone({
         background: isOver ? "rgba(255,255,255,0.03)" : "transparent",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}
+      >
         <strong style={{ textTransform: "capitalize" }}>{title}</strong>
         <span>{count}</span>
       </div>
@@ -69,10 +81,12 @@ function Card({
   post,
   checked,
   onToggleChecked,
+  backlinkProject,
 }: {
   post: PostRow;
   checked: boolean;
   onToggleChecked: (id: string) => void;
+  backlinkProject?: BacklinkProject;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: post.id });
@@ -100,12 +114,23 @@ function Card({
         />
 
         <div style={{ flex: 1 }} {...attributes} {...listeners}>
-          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>{post.title}</div>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>
+            {post.title}
+          </div>
+
           <div style={{ fontSize: 12, opacity: 0.75, color: "#fff" }}>
             {new Date(post.created_at).toLocaleString()}
           </div>
 
-          <div style={{ marginTop: 10 }}>
+          <div
+            style={{
+              marginTop: 10,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <button
               onClick={(e) => {
                 e.preventDefault();
@@ -115,6 +140,32 @@ function Card({
             >
               Export .docx
             </button>
+
+            <Link
+              href={`/backlinks?draftId=${encodeURIComponent(post.id)}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: "#9ad" }}
+            >
+              Backlinks
+            </Link>
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "#bbb",
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              Backlink status: {backlinkProject?.status || "none"}
+            </span>
+            <span>
+              Score: {backlinkProject?.link_worthy_score ?? 0}
+            </span>
           </div>
         </div>
       </div>
@@ -126,6 +177,7 @@ export default function LibraryPage() {
   const supabase = supabaseBrowser();
 
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [backlinkProjects, setBacklinkProjects] = useState<BacklinkProject[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string>("");
   const [status, setStatus] = useState<string>("");
@@ -138,27 +190,37 @@ export default function LibraryPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load() {
     setLoading(true);
     setErr("");
     setStatus("");
+
     try {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) {
         setPosts([]);
+        setBacklinkProjects([]);
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from("blog_posts")
-        .select("id,title,created_at,status,sources")
-        .order("created_at", { ascending: false });
+      const [{ data, error }, { data: backlinkData, error: backlinkError }] =
+        await Promise.all([
+          supabase
+            .from("blog_posts")
+            .select("id,title,created_at,status,sources")
+            .order("created_at", { ascending: false }),
+
+          supabase
+            .from("backlink_projects")
+            .select("*")
+            .eq("user_id", auth.user.id),
+        ]);
 
       if (error) throw error;
+      if (backlinkError) throw backlinkError;
 
       const normalized = ((data as any[]) ?? []).map((p) => ({
         ...p,
@@ -166,6 +228,7 @@ export default function LibraryPage() {
       })) as PostRow[];
 
       setPosts(normalized);
+      setBacklinkProjects((backlinkData as BacklinkProject[]) || []);
     } catch (e: any) {
       setErr(e?.message || "Failed to load");
     } finally {
@@ -205,6 +268,10 @@ export default function LibraryPage() {
   function clearSelection() {
     setSelectedIds([]);
     setStatus("");
+  }
+
+  function getBacklinkProject(postId: string) {
+    return backlinkProjects.find((p) => p.blog_draft_id === postId);
   }
 
   async function deleteSelected() {
@@ -350,7 +417,14 @@ export default function LibraryPage() {
 
   return (
     <main style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
         <strong style={{ fontSize: 26 }}>Library</strong>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -375,13 +449,27 @@ export default function LibraryPage() {
       </div>
 
       {err ? (
-        <div style={{ padding: 12, border: "1px solid #333", borderRadius: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #333",
+            borderRadius: 12,
+            marginBottom: 12,
+          }}
+        >
           Error: {err}
         </div>
       ) : null}
 
       {status ? (
-        <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #eee",
+            borderRadius: 12,
+            marginBottom: 12,
+          }}
+        >
           {status}
         </div>
       ) : null}
@@ -408,15 +496,25 @@ export default function LibraryPage() {
         <button onClick={() => bulkMoveSelected("review")} disabled={!selectedIds.length || busy}>
           Move selected to Review
         </button>
-        <button onClick={() => bulkMoveSelected("scheduled")} disabled={!selectedIds.length || busy}>
+        <button
+          onClick={() => bulkMoveSelected("scheduled")}
+          disabled={!selectedIds.length || busy}
+        >
           Move selected to Scheduled
         </button>
-        <button onClick={() => bulkMoveSelected("published")} disabled={!selectedIds.length || busy}>
+        <button
+          onClick={() => bulkMoveSelected("published")}
+          disabled={!selectedIds.length || busy}
+        >
           Move selected to Published
         </button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+      >
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto" }}>
           {PIPELINE.map((stage) => (
             <ColumnDropZone
@@ -436,6 +534,7 @@ export default function LibraryPage() {
                       post={p}
                       checked={selectedIds.includes(p.id)}
                       onToggleChecked={toggleChecked}
+                      backlinkProject={getBacklinkProject(p.id)}
                     />
                   ))}
                 </div>
