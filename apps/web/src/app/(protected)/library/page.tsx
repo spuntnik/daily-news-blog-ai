@@ -28,7 +28,6 @@ type PostRow = {
   status: Stage;
   sources: any;
   excerpt?: string | null;
-  content?: string | null;
 };
 
 type BacklinkProject = {
@@ -68,7 +67,13 @@ function ColumnDropZone({
         background: isOver ? "rgba(255,255,255,0.03)" : "transparent",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 10,
+        }}
+      >
         <strong style={{ textTransform: "capitalize" }}>{title}</strong>
         <span>{count}</span>
       </div>
@@ -114,7 +119,9 @@ function Card({
         />
 
         <div style={{ flex: 1 }} {...attributes} {...listeners}>
-          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>{post.title}</div>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>
+            {post.title}
+          </div>
 
           <div style={{ fontSize: 12, opacity: 0.75, color: "#fff" }}>
             {new Date(post.created_at).toLocaleString()}
@@ -178,7 +185,9 @@ export default function LibraryPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
 
   useEffect(() => {
     void load();
@@ -198,17 +207,18 @@ export default function LibraryPage() {
         return;
       }
 
-      const [{ data, error }, { data: backlinkData, error: backlinkError }] = await Promise.all([
-        supabase
-          .from("blog_posts")
-          .select("id,title,created_at,status,sources,excerpt,content")
-          .order("created_at", { ascending: false }),
+      const [{ data, error }, { data: backlinkData, error: backlinkError }] =
+        await Promise.all([
+          supabase
+            .from("blog_posts")
+            .select("id,title,created_at,status,sources,excerpt")
+            .order("created_at", { ascending: false }),
 
-        supabase
-          .from("backlink_projects")
-          .select("*")
-          .eq("user_id", auth.user.id),
-      ]);
+          supabase
+            .from("backlink_projects")
+            .select("*")
+            .eq("user_id", auth.user.id),
+        ]);
 
       if (error) throw error;
       if (backlinkError) throw backlinkError;
@@ -250,7 +260,9 @@ export default function LibraryPage() {
   }
 
   function toggleChecked(id: string) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   }
 
   function selectAllInStage(stage: Stage) {
@@ -264,13 +276,19 @@ export default function LibraryPage() {
   }
 
   function calculateLinkWorthiness(post: PostRow) {
-    const text = `${post.title || ""} ${post.excerpt || ""} ${post.content || ""}`;
+    const text = `${post.title || ""} ${post.excerpt || ""}`;
     let score = 30;
 
-    if (text.length > 1000) score += 15;
-    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) score += 20;
-    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) score += 10;
-    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) score += 15;
+    if (text.length > 300) score += 15;
+    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) {
+      score += 20;
+    }
+    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) {
+      score += 10;
+    }
+    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) {
+      score += 15;
+    }
     if ((post.excerpt || "").length > 80) score += 10;
 
     return Math.min(score, 100);
@@ -304,7 +322,8 @@ export default function LibraryPage() {
         page_url: "",
         relevance_reason:
           "This post has local Singapore relevance and may fit business publications serving that market.",
-        outreach_angle: "Position it as a locally relevant resource for Singapore professionals.",
+        outreach_angle:
+          "Position it as a locally relevant resource for Singapore professionals.",
       });
     }
 
@@ -342,9 +361,7 @@ export default function LibraryPage() {
       const user = auth.user;
       if (!user) throw new Error("Not signed in.");
 
-      const selectedPosts = posts.filter((p) => selectedIds.includes(p.id));
-
-      for (const post of selectedPosts) {
+      for (const post of posts.filter((p) => selectedIds.includes(p.id))) {
         let project = backlinkProjects.find((p) => p.blog_post_id === post.id);
 
         if (!project) {
@@ -352,6 +369,7 @@ export default function LibraryPage() {
             .from("backlink_projects")
             .insert({
               blog_post_id: post.id,
+              blog_draft_id: null,
               user_id: user.id,
               status: "ready",
               link_worthy_score: calculateLinkWorthiness(post),
@@ -432,7 +450,10 @@ export default function LibraryPage() {
   async function persistStage(id: string, next: Stage) {
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)));
 
-    const { error } = await supabase.from("blog_posts").update({ status: next }).eq("id", id);
+    const { error } = await supabase
+      .from("blog_posts")
+      .update({ status: next })
+      .eq("id", id);
 
     if (error) {
       await load();
@@ -447,7 +468,10 @@ export default function LibraryPage() {
     setStatus(`Moving ${selectedIds.length} item(s) to ${next}...`);
 
     try {
-      const { error } = await supabase.from("blog_posts").update({ status: next }).in("id", selectedIds);
+      const { error } = await supabase
+        .from("blog_posts")
+        .update({ status: next })
+        .in("id", selectedIds);
 
       if (error) throw error;
 
@@ -474,7 +498,9 @@ export default function LibraryPage() {
     try {
       for (const id of selectedIds) {
         const res = await fetch(`/api/export-docx?id=${encodeURIComponent(id)}`);
-        if (!res.ok) throw new Error(`Export failed for item ${id}`);
+        if (!res.ok) {
+          throw new Error(`Export failed for item ${id}`);
+        }
 
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -482,8 +508,8 @@ export default function LibraryPage() {
         const matchingPost = posts.find((p) => p.id === id);
         const safeTitle =
           (matchingPost?.title || "blog-post")
-            .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
-            .replace(/\s+/g, "-")
+            .replace(/[<>:\"/\\\\|?*\\x00-\\x1F]/g, "")
+            .replace(/\\s+/g, "-")
             .slice(0, 80) || "blog-post";
 
         const a = document.createElement("a");
@@ -532,7 +558,14 @@ export default function LibraryPage() {
 
   return (
     <main style={{ padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
         <strong style={{ fontSize: 26 }}>Library</strong>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -561,13 +594,27 @@ export default function LibraryPage() {
       </div>
 
       {err ? (
-        <div style={{ padding: 12, border: "1px solid #333", borderRadius: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #333",
+            borderRadius: 12,
+            marginBottom: 12,
+          }}
+        >
           Error: {err}
         </div>
       ) : null}
 
       {status ? (
-        <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, marginBottom: 12 }}>
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid #eee",
+            borderRadius: 12,
+            marginBottom: 12,
+          }}
+        >
           {status}
         </div>
       ) : null}
@@ -605,8 +652,16 @@ export default function LibraryPage() {
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto" }}>
           {PIPELINE.map((stage) => (
-            <ColumnDropZone key={stage} id={stage} title={stage} count={grouped[stage]?.length ?? 0}>
-              <SortableContext items={grouped[stage].map((p) => p.id)} strategy={verticalListSortingStrategy}>
+            <ColumnDropZone
+              key={stage}
+              id={stage}
+              title={stage}
+              count={grouped[stage]?.length ?? 0}
+            >
+              <SortableContext
+                items={grouped[stage].map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
                 <div style={{ display: "grid", gap: 10 }}>
                   {grouped[stage].map((p) => (
                     <Card
