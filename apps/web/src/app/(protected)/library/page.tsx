@@ -27,11 +27,13 @@ type PostRow = {
   created_at: string;
   status: Stage;
   sources: any;
+  excerpt?: string | null;
+  content?: string | null;
 };
 
 type BacklinkProject = {
   id: string;
-  blog_draft_id: string;
+  blog_post_id: string | null;
   user_id: string;
   status: string;
   link_worthy_score: number;
@@ -66,9 +68,7 @@ function ColumnDropZone({
         background: isOver ? "rgba(255,255,255,0.03)" : "transparent",
       }}
     >
-      <div
-        style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
         <strong style={{ textTransform: "capitalize" }}>{title}</strong>
         <span>{count}</span>
       </div>
@@ -114,9 +114,7 @@ function Card({
         />
 
         <div style={{ flex: 1 }} {...attributes} {...listeners}>
-          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>
-            {post.title}
-          </div>
+          <div style={{ fontWeight: 700, marginBottom: 6, color: "#fff" }}>{post.title}</div>
 
           <div style={{ fontSize: 12, opacity: 0.75, color: "#fff" }}>
             {new Date(post.created_at).toLocaleString()}
@@ -142,9 +140,9 @@ function Card({
             </button>
 
             <Link
-              href={`/backlinks?draftId=${encodeURIComponent(post.id)}`}
+              href={`/backlinks?postId=${encodeURIComponent(post.id)}`}
               onClick={(e) => e.stopPropagation()}
-              style={{ color: "#9ad" }}
+              style={{ color: "#9ad", textDecoration: "underline" }}
             >
               Backlinks
             </Link>
@@ -160,12 +158,8 @@ function Card({
               flexWrap: "wrap",
             }}
           >
-            <span>
-              Backlink status: {backlinkProject?.status || "none"}
-            </span>
-            <span>
-              Score: {backlinkProject?.link_worthy_score ?? 0}
-            </span>
+            <span>Backlink status: {backlinkProject?.status || "none"}</span>
+            <span>Score: {backlinkProject?.link_worthy_score ?? 0}</span>
           </div>
         </div>
       </div>
@@ -184,12 +178,10 @@ export default function LibraryPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   async function load() {
@@ -206,18 +198,17 @@ export default function LibraryPage() {
         return;
       }
 
-      const [{ data, error }, { data: backlinkData, error: backlinkError }] =
-        await Promise.all([
-          supabase
-            .from("blog_posts")
-            .select("id,title,created_at,status,sources")
-            .order("created_at", { ascending: false }),
+      const [{ data, error }, { data: backlinkData, error: backlinkError }] = await Promise.all([
+        supabase
+          .from("blog_posts")
+          .select("id,title,created_at,status,sources,excerpt,content")
+          .order("created_at", { ascending: false }),
 
-          supabase
-            .from("backlink_projects")
-            .select("*")
-            .eq("user_id", auth.user.id),
-        ]);
+        supabase
+          .from("backlink_projects")
+          .select("*")
+          .eq("user_id", auth.user.id),
+      ]);
 
       if (error) throw error;
       if (backlinkError) throw backlinkError;
@@ -249,15 +240,17 @@ export default function LibraryPage() {
     return map;
   }, [posts]);
 
+  function getBacklinkProject(postId: string) {
+    return backlinkProjects.find((p) => p.blog_post_id === postId);
+  }
+
   function findStageById(id: string): Stage | null {
     const p = posts.find((x) => x.id === id);
     return p?.status ?? null;
   }
 
   function toggleChecked(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   function selectAllInStage(stage: Stage) {
@@ -270,8 +263,138 @@ export default function LibraryPage() {
     setStatus("");
   }
 
-  function getBacklinkProject(postId: string) {
-    return backlinkProjects.find((p) => p.blog_draft_id === postId);
+  function calculateLinkWorthiness(post: PostRow) {
+    const text = `${post.title || ""} ${post.excerpt || ""} ${post.content || ""}`;
+    let score = 30;
+
+    if (text.length > 1000) score += 15;
+    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) score += 20;
+    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) score += 10;
+    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) score += 15;
+    if ((post.excerpt || "").length > 80) score += 10;
+
+    return Math.min(score, 100);
+  }
+
+  function buildSmartSuggestions(post: PostRow) {
+    const text = `${post.title || ""} ${post.excerpt || ""}`.toLowerCase();
+    const suggestions: {
+      domain: string;
+      page_title: string;
+      page_url: string;
+      relevance_reason: string;
+      outreach_angle: string;
+    }[] = [];
+
+    if (text.includes("executive") || text.includes("leadership")) {
+      suggestions.push({
+        domain: "leadershipinsights.example.com",
+        page_title: "Leadership Resources",
+        page_url: "",
+        relevance_reason:
+          "This post is leadership-oriented and may fit executive development or management resources.",
+        outreach_angle: "Lead with executive relevance and practical takeaways.",
+      });
+    }
+
+    if (text.includes("singapore")) {
+      suggestions.push({
+        domain: "sgbusinesshub.example.com",
+        page_title: "Singapore Business Insights",
+        page_url: "",
+        relevance_reason:
+          "This post has local Singapore relevance and may fit business publications serving that market.",
+        outreach_angle: "Position it as a locally relevant resource for Singapore professionals.",
+      });
+    }
+
+    if (text.includes("marketing") || text.includes("ai")) {
+      suggestions.push({
+        domain: "digitalgrowthguide.example.com",
+        page_title: "Digital Growth Library",
+        page_url: "",
+        relevance_reason:
+          "The content aligns with digital growth, AI, and practical strategy topics.",
+        outreach_angle: "Present it as a practical implementation guide.",
+      });
+    }
+
+    suggestions.push({
+      domain: "industryroundup.example.com",
+      page_title: "Industry Resource Roundup",
+      page_url: "",
+      relevance_reason:
+        "This post appears educational and suitable for roundup or resource pages.",
+      outreach_angle: "Offer the article as a concise resource with direct reader value.",
+    });
+
+    return suggestions.slice(0, 5);
+  }
+
+  async function oneClickGenerateBacklinksForSelected() {
+    if (!selectedIds.length) return;
+
+    setBusy(true);
+    setStatus("Generating AI backlink opportunities for selected posts...");
+
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth.user;
+      if (!user) throw new Error("Not signed in.");
+
+      const selectedPosts = posts.filter((p) => selectedIds.includes(p.id));
+
+      for (const post of selectedPosts) {
+        let project = backlinkProjects.find((p) => p.blog_post_id === post.id);
+
+        if (!project) {
+          const { data: createdProject, error: projectError } = await supabase
+            .from("backlink_projects")
+            .insert({
+              blog_post_id: post.id,
+              user_id: user.id,
+              status: "ready",
+              link_worthy_score: calculateLinkWorthiness(post),
+              notes: "",
+            })
+            .select()
+            .single();
+
+          if (projectError) throw projectError;
+          project = createdProject as BacklinkProject;
+          setBacklinkProjects((prev) => [project!, ...prev]);
+        }
+
+        const suggestions = buildSmartSuggestions(post);
+
+        if (suggestions.length) {
+          const rows = suggestions.map((item) => ({
+            backlink_project_id: project!.id,
+            domain: item.domain,
+            page_title: item.page_title,
+            page_url: item.page_url,
+            relevance_reason: item.relevance_reason,
+            outreach_angle: item.outreach_angle,
+            status: "planned",
+          }));
+
+          const { error: oppError } = await supabase
+            .from("backlink_opportunities")
+            .insert(rows);
+
+          if (oppError) throw oppError;
+        }
+      }
+
+      setStatus(`Generated backlink opportunities for ${selectedIds.length} selected post(s).`);
+      setSelectedIds([]);
+      await load();
+    } catch (e: any) {
+      setStatus("");
+      alert(e?.message || "Failed to generate AI backlink opportunities.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function deleteSelected() {
@@ -309,10 +432,7 @@ export default function LibraryPage() {
   async function persistStage(id: string, next: Stage) {
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)));
 
-    const { error } = await supabase
-      .from("blog_posts")
-      .update({ status: next })
-      .eq("id", id);
+    const { error } = await supabase.from("blog_posts").update({ status: next }).eq("id", id);
 
     if (error) {
       await load();
@@ -327,10 +447,7 @@ export default function LibraryPage() {
     setStatus(`Moving ${selectedIds.length} item(s) to ${next}...`);
 
     try {
-      const { error } = await supabase
-        .from("blog_posts")
-        .update({ status: next })
-        .in("id", selectedIds);
+      const { error } = await supabase.from("blog_posts").update({ status: next }).in("id", selectedIds);
 
       if (error) throw error;
 
@@ -357,9 +474,7 @@ export default function LibraryPage() {
     try {
       for (const id of selectedIds) {
         const res = await fetch(`/api/export-docx?id=${encodeURIComponent(id)}`);
-        if (!res.ok) {
-          throw new Error(`Export failed for item ${id}`);
-        }
+        if (!res.ok) throw new Error(`Export failed for item ${id}`);
 
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -417,14 +532,7 @@ export default function LibraryPage() {
 
   return (
     <main style={{ padding: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <strong style={{ fontSize: 26 }}>Library</strong>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -434,6 +542,10 @@ export default function LibraryPage() {
 
           <button onClick={bulkExportSelected} disabled={!selectedIds.length || busy}>
             Bulk Export .docx ({selectedIds.length})
+          </button>
+
+          <button onClick={oneClickGenerateBacklinksForSelected} disabled={!selectedIds.length || busy}>
+            AI Backlinks for Selected ({selectedIds.length})
           </button>
 
           <button onClick={deleteSelected} disabled={!selectedIds.length || busy}>
@@ -449,27 +561,13 @@ export default function LibraryPage() {
       </div>
 
       {err ? (
-        <div
-          style={{
-            padding: 12,
-            border: "1px solid #333",
-            borderRadius: 12,
-            marginBottom: 12,
-          }}
-        >
+        <div style={{ padding: 12, border: "1px solid #333", borderRadius: 12, marginBottom: 12 }}>
           Error: {err}
         </div>
       ) : null}
 
       {status ? (
-        <div
-          style={{
-            padding: 12,
-            border: "1px solid #eee",
-            borderRadius: 12,
-            marginBottom: 12,
-          }}
-        >
+        <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, marginBottom: 12 }}>
           {status}
         </div>
       ) : null}
@@ -496,37 +594,19 @@ export default function LibraryPage() {
         <button onClick={() => bulkMoveSelected("review")} disabled={!selectedIds.length || busy}>
           Move selected to Review
         </button>
-        <button
-          onClick={() => bulkMoveSelected("scheduled")}
-          disabled={!selectedIds.length || busy}
-        >
+        <button onClick={() => bulkMoveSelected("scheduled")} disabled={!selectedIds.length || busy}>
           Move selected to Scheduled
         </button>
-        <button
-          onClick={() => bulkMoveSelected("published")}
-          disabled={!selectedIds.length || busy}
-        >
+        <button onClick={() => bulkMoveSelected("published")} disabled={!selectedIds.length || busy}>
           Move selected to Published
         </button>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={onDragEnd}
-      >
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto" }}>
           {PIPELINE.map((stage) => (
-            <ColumnDropZone
-              key={stage}
-              id={stage}
-              title={stage}
-              count={grouped[stage]?.length ?? 0}
-            >
-              <SortableContext
-                items={grouped[stage].map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
+            <ColumnDropZone key={stage} id={stage} title={stage} count={grouped[stage]?.length ?? 0}>
+              <SortableContext items={grouped[stage].map((p) => p.id)} strategy={verticalListSortingStrategy}>
                 <div style={{ display: "grid", gap: 10 }}>
                   {grouped[stage].map((p) => (
                     <Card
