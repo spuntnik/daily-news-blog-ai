@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
 
-type BlogDraft = {
+type BlogPost = {
   id: string;
-  user_id: string;
   title: string;
-  excerpt: string | null;
-  content: string | null;
+  excerpt?: string | null;
+  content?: string | null;
   status: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 };
 
 type BacklinkProject = {
   id: string;
-  blog_draft_id: string;
+  blog_post_id: string | null;
+  blog_draft_id?: string | null;
   user_id: string;
   status: string;
   link_worthy_score: number;
@@ -64,14 +65,15 @@ type TabKey = "overview" | "opportunities" | "outreach" | "tracker";
 
 export default function BacklinksPage() {
   const supabase = supabaseBrowser();
+  const searchParams = useSearchParams();
 
-  const [drafts, setDrafts] = useState<BlogDraft[]>([]);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [projects, setProjects] = useState<BacklinkProject[]>([]);
   const [opportunities, setOpportunities] = useState<BacklinkOpportunity[]>([]);
   const [outreachRows, setOutreachRows] = useState<BacklinkOutreach[]>([]);
   const [links, setLinks] = useState<BacklinkLink[]>([]);
 
-  const [selectedDraftId, setSelectedDraftId] = useState("");
+  const [selectedPostId, setSelectedPostId] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
   const [loading, setLoading] = useState(true);
@@ -99,28 +101,27 @@ export default function BacklinksPage() {
 
   useEffect(() => {
     void loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedDraft = useMemo(
-    () => drafts.find((d) => d.id === selectedDraftId) || null,
-    [drafts, selectedDraftId]
+  const selectedPost = useMemo(
+    () => posts.find((p) => p.id === selectedPostId) || null,
+    [posts, selectedPostId]
   );
 
   const selectedProject = useMemo(
-    () => projects.find((p) => p.blog_draft_id === selectedDraftId) || null,
-    [projects, selectedDraftId]
+    () => projects.find((p) => p.blog_post_id === selectedPostId) || null,
+    [projects, selectedPostId]
   );
 
   const selectedOpportunities = useMemo(() => {
     if (!selectedProject) return [];
-    return opportunities.filter(
-      (o) => o.backlink_project_id === selectedProject.id
-    );
+    return opportunities.filter((o) => o.backlink_project_id === selectedProject.id);
   }, [opportunities, selectedProject]);
 
   const selectedOutreach = useMemo(() => {
-    const oppIds = new Set(selectedOpportunities.map((o) => o.id));
-    return outreachRows.filter((o) => oppIds.has(o.backlink_opportunity_id));
+    const ids = new Set(selectedOpportunities.map((o) => o.id));
+    return outreachRows.filter((o) => ids.has(o.backlink_opportunity_id));
   }, [outreachRows, selectedOpportunities]);
 
   const selectedLinks = useMemo(() => {
@@ -132,8 +133,8 @@ export default function BacklinksPage() {
     setNotes(selectedProject?.notes || "");
   }, [selectedProject]);
 
-  function getProjectForDraft(draftId: string) {
-    return projects.find((p) => p.blog_draft_id === draftId);
+  function getProjectForPost(postId: string) {
+    return projects.find((p) => p.blog_post_id === postId);
   }
 
   async function loadAll() {
@@ -148,68 +149,69 @@ export default function BacklinksPage() {
         return;
       }
 
-      const [draftsRes, projectsRes, oppsRes, outreachRes, linksRes] =
-        await Promise.all([
-          supabase
-            .from("blog_drafts")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("updated_at", { ascending: false }),
+      const [postsRes, projectsRes, oppsRes, outreachRes, linksRes] = await Promise.all([
+        supabase
+          .from("blog_posts")
+          .select("*")
+          .order("created_at", { ascending: false }),
 
-          supabase
-            .from("backlink_projects")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("updated_at", { ascending: false }),
+        supabase
+          .from("backlink_projects")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false }),
 
-          supabase
-            .from("backlink_opportunities")
-            .select("*")
-            .order("created_at", { ascending: false }),
+        supabase
+          .from("backlink_opportunities")
+          .select("*")
+          .order("created_at", { ascending: false }),
 
-          supabase
-            .from("backlink_outreach")
-            .select("*")
-            .order("created_at", { ascending: false }),
+        supabase
+          .from("backlink_outreach")
+          .select("*")
+          .order("created_at", { ascending: false }),
 
-          supabase
-            .from("backlink_links")
-            .select("*")
-            .order("created_at", { ascending: false }),
-        ]);
+        supabase
+          .from("backlink_links")
+          .select("*")
+          .order("created_at", { ascending: false }),
+      ]);
 
-      if (draftsRes.error) throw draftsRes.error;
+      if (postsRes.error) throw postsRes.error;
       if (projectsRes.error) throw projectsRes.error;
       if (oppsRes.error) throw oppsRes.error;
       if (outreachRes.error) throw outreachRes.error;
       if (linksRes.error) throw linksRes.error;
 
-      const nextDrafts = (draftsRes.data || []) as BlogDraft[];
+      const nextPosts = (postsRes.data || []) as BlogPost[];
       const nextProjects = (projectsRes.data || []) as BacklinkProject[];
       const projectIds = new Set(nextProjects.map((p) => p.id));
 
-      const nextOpportunities = ((oppsRes.data || []) as BacklinkOpportunity[]).filter(
-        (o) => projectIds.has(o.backlink_project_id)
+      const nextOpportunities = ((oppsRes.data || []) as BacklinkOpportunity[]).filter((o) =>
+        projectIds.has(o.backlink_project_id)
       );
 
-      const oppIds = new Set(nextOpportunities.map((o) => o.id));
+      const opportunityIds = new Set(nextOpportunities.map((o) => o.id));
 
-      const nextOutreach = ((outreachRes.data || []) as BacklinkOutreach[]).filter(
-        (o) => oppIds.has(o.backlink_opportunity_id)
+      const nextOutreach = ((outreachRes.data || []) as BacklinkOutreach[]).filter((o) =>
+        opportunityIds.has(o.backlink_opportunity_id)
       );
 
       const nextLinks = ((linksRes.data || []) as BacklinkLink[]).filter((l) =>
         projectIds.has(l.backlink_project_id)
       );
 
-      setDrafts(nextDrafts);
+      setPosts(nextPosts);
       setProjects(nextProjects);
       setOpportunities(nextOpportunities);
       setOutreachRows(nextOutreach);
       setLinks(nextLinks);
 
-      if (!selectedDraftId && nextDrafts.length > 0) {
-        setSelectedDraftId(nextDrafts[0].id);
+      const urlPostId = searchParams.get("postId");
+      if (urlPostId && nextPosts.some((p) => p.id === urlPostId)) {
+        setSelectedPostId(urlPostId);
+      } else if (nextPosts.length > 0) {
+        setSelectedPostId(nextPosts[0].id);
       }
     } catch (err: any) {
       setMessage(err?.message || "Failed to load backlinks workspace.");
@@ -218,17 +220,29 @@ export default function BacklinksPage() {
     }
   }
 
+  function calculateLinkWorthiness(post: BlogPost) {
+    const text = `${post.title || ""} ${post.excerpt || ""} ${post.content || ""}`;
+    let score = 30;
+
+    if (text.length > 1000) score += 15;
+    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) score += 20;
+    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) score += 10;
+    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) score += 15;
+    if ((post.excerpt || "").length > 80) score += 10;
+
+    return Math.min(score, 100);
+  }
+
   async function createBacklinkProject() {
-    if (!selectedDraft) return;
+    if (!selectedPost) return;
 
     setBusy(true);
     setMessage("");
 
     try {
-      const existing = getProjectForDraft(selectedDraft.id);
+      const existing = getProjectForPost(selectedPost.id);
       if (existing) {
-        setMessage("Backlink project already exists for this draft.");
-        setBusy(false);
+        setMessage("Backlink project already exists for this post.");
         return;
       }
 
@@ -239,10 +253,10 @@ export default function BacklinksPage() {
       const { data, error } = await supabase
         .from("backlink_projects")
         .insert({
-          blog_draft_id: selectedDraft.id,
+          blog_post_id: selectedPost.id,
           user_id: user.id,
           status: "not_prepared",
-          link_worthy_score: calculateLinkWorthiness(selectedDraft),
+          link_worthy_score: calculateLinkWorthiness(selectedPost),
           notes: "",
         })
         .select()
@@ -257,25 +271,6 @@ export default function BacklinksPage() {
     } finally {
       setBusy(false);
     }
-  }
-
-  function calculateLinkWorthiness(draft: BlogDraft) {
-    const text = `${draft.title || ""} ${draft.excerpt || ""} ${draft.content || ""}`;
-    let score = 30;
-
-    if (text.length > 1000) score += 15;
-    if (/\bguide\b|\bplaybook\b|\bframework\b|\bchecklist\b|\bstrategy\b/i.test(text)) {
-      score += 20;
-    }
-    if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) {
-      score += 10;
-    }
-    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) {
-      score += 15;
-    }
-    if ((draft.excerpt || "").length > 80) score += 10;
-
-    return Math.min(score, 100);
   }
 
   async function saveNotes() {
@@ -294,9 +289,7 @@ export default function BacklinksPage() {
 
       if (error) throw error;
 
-      setProjects((prev) =>
-        prev.map((p) => (p.id === selectedProject.id ? data : p))
-      );
+      setProjects((prev) => prev.map((p) => (p.id === selectedProject.id ? data : p)));
       setMessage("Notes saved.");
     } catch (err: any) {
       setMessage(err?.message || "Failed to save notes.");
@@ -321,9 +314,7 @@ export default function BacklinksPage() {
 
       if (error) throw error;
 
-      setProjects((prev) =>
-        prev.map((p) => (p.id === selectedProject.id ? data : p))
-      );
+      setProjects((prev) => prev.map((p) => (p.id === selectedProject.id ? data : p)));
       setMessage(`Project status updated to ${status}.`);
     } catch (err: any) {
       setMessage(err?.message || "Failed to update project status.");
@@ -376,19 +367,16 @@ export default function BacklinksPage() {
   }
 
   async function createOutreachForOpportunity(opportunity: BacklinkOpportunity) {
-    if (!selectedDraft) return;
+    if (!selectedPost) return;
 
     setBusy(true);
     setMessage("");
 
     try {
-      const existing = outreachRows.find(
-        (o) => o.backlink_opportunity_id === opportunity.id
-      );
+      const existing = outreachRows.find((o) => o.backlink_opportunity_id === opportunity.id);
       if (existing) {
         setMessage("Outreach already exists for this opportunity.");
         setActiveTab("outreach");
-        setBusy(false);
         return;
       }
 
@@ -396,11 +384,11 @@ export default function BacklinksPage() {
       const messageBody = [
         `Hi ${opportunity.domain} team,`,
         "",
-        `I came across ${opportunity.page_title || opportunity.domain} and thought this draft could complement it.`,
+        `I came across ${opportunity.page_title || opportunity.domain} and thought this post could complement it.`,
         opportunity.outreach_angle
           ? `Angle: ${opportunity.outreach_angle}`
-          : "We are building a practical resource that may be useful to your readers.",
-        `Draft: ${selectedDraft.title}`,
+          : "We have a practical resource that may be useful to your readers.",
+        `Post: ${selectedPost.title}`,
         "",
         "Open to sending over the link if helpful.",
       ].join("\n");
@@ -472,18 +460,16 @@ export default function BacklinksPage() {
     }
   }
 
-  async function generateAiSuggestions() {
-    if (!selectedProject || !selectedDraft) return;
+  async function generateAiSuggestionsForPost() {
+    if (!selectedProject || !selectedPost) return;
 
     setBusy(true);
     setMessage("");
 
     try {
-      const suggestions = buildSmartSuggestions(selectedDraft);
-
+      const suggestions = buildSmartSuggestions(selectedPost);
       if (!suggestions.length) {
         setMessage("No suggestions generated.");
-        setBusy(false);
         return;
       }
 
@@ -514,60 +500,63 @@ export default function BacklinksPage() {
     }
   }
 
-  function buildSmartSuggestions(draft: BlogDraft) {
-    const title = draft.title || "";
-    const excerpt = draft.excerpt || "";
-    const text = `${title} ${excerpt}`.toLowerCase();
-
-    const base = [];
+  function buildSmartSuggestions(post: BlogPost) {
+    const text = `${post.title || ""} ${post.excerpt || ""}`.toLowerCase();
+    const suggestions: {
+      domain: string;
+      page_title: string;
+      page_url: string;
+      relevance_reason: string;
+      outreach_angle: string;
+    }[] = [];
 
     if (text.includes("executive") || text.includes("leadership")) {
-      base.push({
+      suggestions.push({
         domain: "leadershipinsights.example.com",
         page_title: "Leadership Resources",
         page_url: "",
         relevance_reason:
-          "This draft is leadership-oriented and may fit a publication that curates executive development resources.",
+          "This post is leadership-oriented and may fit executive development or management resources.",
         outreach_angle:
-          "Position the article as a practical executive resource with clear application value.",
+          "Lead with executive relevance and practical takeaways.",
       });
     }
 
     if (text.includes("singapore")) {
-      base.push({
+      suggestions.push({
         domain: "sgbusinesshub.example.com",
         page_title: "Singapore Business Insights",
         page_url: "",
         relevance_reason:
-          "The draft has a Singapore angle and may fit a local business or executive audience.",
+          "This post has local Singapore relevance and may fit business publications serving that market.",
         outreach_angle:
-          "Lead with local relevance and practical value for Singapore-based professionals.",
+          "Position it as a locally relevant resource for Singapore professionals.",
       });
     }
 
     if (text.includes("marketing") || text.includes("ai")) {
-      base.push({
+      suggestions.push({
         domain: "digitalgrowthguide.example.com",
         page_title: "Digital Growth Library",
         page_url: "",
         relevance_reason:
-          "The content appears relevant to digital growth, AI, and practical business strategy topics.",
+          "The content aligns with digital growth, AI, and practical strategy topics.",
         outreach_angle:
-          "Position the piece as a practical strategy guide for current AI-related marketing shifts.",
+          "Present it as a practical implementation guide.",
       });
     }
 
-    base.push({
+    suggestions.push({
       domain: "industryroundup.example.com",
       page_title: "Industry Resource Roundup",
       page_url: "",
       relevance_reason:
-        "The draft appears educational and could fit a roundup or curated resource page.",
+        "This post appears educational and suitable for roundup or resource pages.",
       outreach_angle:
-        "Offer the article as a concise practical guide for readers who want implementation-focused content.",
+        "Offer the article as a concise resource with direct reader value.",
     });
 
-    return base.slice(0, 5);
+    return suggestions.slice(0, 5);
   }
 
   function pill(status: string) {
@@ -592,7 +581,7 @@ export default function BacklinksPage() {
         Backlinks Workspace
       </h1>
       <p style={{ marginBottom: 20, opacity: 0.7 }}>
-        Turn drafts into authority assets, outreach opportunities, and tracked backlinks.
+        Turn blog posts into authority assets, outreach opportunities, and tracked backlinks.
       </p>
 
       {message ? (
@@ -611,40 +600,33 @@ export default function BacklinksPage() {
       {loading ? <div>Loading...</div> : null}
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        <div style={{ width: 320 }}>
-          <h3 style={{ marginBottom: 12 }}>Drafts</h3>
+        <div style={{ width: 340 }}>
+          <h3 style={{ marginBottom: 12 }}>Blog posts</h3>
 
           <div style={{ display: "grid", gap: 10 }}>
-            {drafts.map((draft) => {
-              const project = getProjectForDraft(draft.id);
+            {posts.map((post) => {
+              const project = getProjectForPost(post.id);
 
               return (
                 <button
-                  key={draft.id}
-                  onClick={() => setSelectedDraftId(draft.id)}
+                  key={post.id}
+                  onClick={() => setSelectedPostId(post.id)}
                   style={{
                     textAlign: "left",
                     padding: 12,
                     border: "1px solid #ccc",
                     borderRadius: 10,
-                    background:
-                      selectedDraftId === draft.id ? "#f2f2f2" : "white",
+                    background: selectedPostId === post.id ? "#f2f2f2" : "white",
                     cursor: "pointer",
                   }}
                 >
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                    {draft.title}
-                  </div>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{post.title}</div>
                   <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
-                    {draft.status}
+                    {post.status}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {project ? pill(project.status) : null}
-                    {project ? (
-                      <span style={{ fontSize: 12 }}>
-                        Score: {project.link_worthy_score}
-                      </span>
-                    ) : null}
+                    {project ? <span style={{ fontSize: 12 }}>Score: {project.link_worthy_score}</span> : null}
                   </div>
                 </button>
               );
@@ -653,8 +635,8 @@ export default function BacklinksPage() {
         </div>
 
         <div style={{ flex: 1 }}>
-          {!selectedDraft ? (
-            <div>Select a draft</div>
+          {!selectedPost ? (
+            <div>Select a post</div>
           ) : (
             <>
               <div
@@ -665,29 +647,19 @@ export default function BacklinksPage() {
                   marginBottom: 16,
                 }}
               >
-                <h2 style={{ margin: 0, marginBottom: 8 }}>{selectedDraft.title}</h2>
+                <h2 style={{ margin: 0, marginBottom: 8 }}>{selectedPost.title}</h2>
                 <p style={{ margin: 0, opacity: 0.75 }}>
-                  {selectedDraft.excerpt || "No excerpt available."}
+                  {selectedPost.excerpt || "No excerpt available."}
                 </p>
 
-                <div
-                  style={{
-                    marginTop: 16,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {!selectedProject ? (
                     <button onClick={createBacklinkProject} disabled={busy}>
                       {busy ? "Working..." : "Create Backlink Project"}
                     </button>
                   ) : (
                     <>
-                      <button
-                        onClick={() => updateProjectStatus("ready")}
-                        disabled={busy}
-                      >
+                      <button onClick={() => updateProjectStatus("ready")} disabled={busy}>
                         Mark Ready
                       </button>
                       <button
@@ -696,7 +668,7 @@ export default function BacklinksPage() {
                       >
                         Start Outreach
                       </button>
-                      <button onClick={generateAiSuggestions} disabled={busy}>
+                      <button onClick={generateAiSuggestionsForPost} disabled={busy}>
                         AI Backlink Finder
                       </button>
                     </>
@@ -706,40 +678,17 @@ export default function BacklinksPage() {
 
               {selectedProject ? (
                 <>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      marginBottom: 16,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <button onClick={() => setActiveTab("overview")}>
-                      Overview
-                    </button>
-                    <button onClick={() => setActiveTab("opportunities")}>
-                      Opportunities
-                    </button>
-                    <button onClick={() => setActiveTab("outreach")}>
-                      Outreach
-                    </button>
-                    <button onClick={() => setActiveTab("tracker")}>
-                      Link Tracker
-                    </button>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                    <button onClick={() => setActiveTab("overview")}>Overview</button>
+                    <button onClick={() => setActiveTab("opportunities")}>Opportunities</button>
+                    <button onClick={() => setActiveTab("outreach")}>Outreach</button>
+                    <button onClick={() => setActiveTab("tracker")}>Link Tracker</button>
                   </div>
 
                   {activeTab === "overview" ? (
-                    <div
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 12,
-                        padding: 16,
-                      }}
-                    >
+                    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
                       <h3>Overview</h3>
-                      <div style={{ marginBottom: 10 }}>
-                        Status: {pill(selectedProject.status)}
-                      </div>
+                      <div style={{ marginBottom: 10 }}>Status: {pill(selectedProject.status)}</div>
                       <div style={{ marginBottom: 10 }}>
                         Link-worthy score: {selectedProject.link_worthy_score}
                       </div>
@@ -749,9 +698,7 @@ export default function BacklinksPage() {
                       <div style={{ marginBottom: 10 }}>
                         Outreach drafts: {selectedOutreach.length}
                       </div>
-                      <div style={{ marginBottom: 16 }}>
-                        Links tracked: {selectedLinks.length}
-                      </div>
+                      <div style={{ marginBottom: 16 }}>Links tracked: {selectedLinks.length}</div>
 
                       <div style={{ marginBottom: 8, fontWeight: 600 }}>Notes</div>
                       <textarea
@@ -767,50 +714,29 @@ export default function BacklinksPage() {
                   ) : null}
 
                   {activeTab === "opportunities" ? (
-                    <div
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 12,
-                        padding: 16,
-                      }}
-                    >
+                    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
                       <h3>Opportunities</h3>
 
-                      <div
-                        style={{
-                          display: "grid",
-                          gap: 10,
-                          marginBottom: 16,
-                        }}
-                      >
+                      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
                         <input
                           placeholder="Domain"
                           value={newOpportunity.domain}
                           onChange={(e) =>
-                            setNewOpportunity((prev) => ({
-                              ...prev,
-                              domain: e.target.value,
-                            }))
+                            setNewOpportunity((prev) => ({ ...prev, domain: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Page title"
                           value={newOpportunity.page_title}
                           onChange={(e) =>
-                            setNewOpportunity((prev) => ({
-                              ...prev,
-                              page_title: e.target.value,
-                            }))
+                            setNewOpportunity((prev) => ({ ...prev, page_title: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Page URL"
                           value={newOpportunity.page_url}
                           onChange={(e) =>
-                            setNewOpportunity((prev) => ({
-                              ...prev,
-                              page_url: e.target.value,
-                            }))
+                            setNewOpportunity((prev) => ({ ...prev, page_url: e.target.value }))
                           }
                         />
                         <textarea
@@ -844,18 +770,10 @@ export default function BacklinksPage() {
                         {selectedOpportunities.map((opportunity) => (
                           <div
                             key={opportunity.id}
-                            style={{
-                              border: "1px solid #ddd",
-                              borderRadius: 10,
-                              padding: 12,
-                            }}
+                            style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}
                           >
-                            <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                              {opportunity.domain}
-                            </div>
-                            <div style={{ marginBottom: 6 }}>
-                              {pill(opportunity.status)}
-                            </div>
+                            <div style={{ fontWeight: 700, marginBottom: 6 }}>{opportunity.domain}</div>
+                            <div style={{ marginBottom: 6 }}>{pill(opportunity.status)}</div>
                             <div style={{ fontSize: 14, marginBottom: 6 }}>
                               {opportunity.page_title || "No page title"}
                             </div>
@@ -866,9 +784,7 @@ export default function BacklinksPage() {
                               {opportunity.outreach_angle || "No outreach angle"}
                             </div>
                             <button
-                              onClick={() =>
-                                createOutreachForOpportunity(opportunity)
-                              }
+                              onClick={() => createOutreachForOpportunity(opportunity)}
                               disabled={busy}
                             >
                               Create Outreach Draft
@@ -876,21 +792,13 @@ export default function BacklinksPage() {
                           </div>
                         ))}
 
-                        {selectedOpportunities.length === 0 ? (
-                          <div>No opportunities yet.</div>
-                        ) : null}
+                        {selectedOpportunities.length === 0 ? <div>No opportunities yet.</div> : null}
                       </div>
                     </div>
                   ) : null}
 
                   {activeTab === "outreach" ? (
-                    <div
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 12,
-                        padding: 16,
-                      }}
-                    >
+                    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
                       <h3>Outreach</h3>
 
                       <div style={{ display: "grid", gap: 12 }}>
@@ -902,18 +810,12 @@ export default function BacklinksPage() {
                           return (
                             <div
                               key={row.id}
-                              style={{
-                                border: "1px solid #ddd",
-                                borderRadius: 10,
-                                padding: 12,
-                              }}
+                              style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}
                             >
                               <div style={{ fontWeight: 700, marginBottom: 6 }}>
                                 {opp?.domain || "Opportunity"}
                               </div>
-                              <div style={{ marginBottom: 6 }}>
-                                Subject: {row.subject_line}
-                              </div>
+                              <div style={{ marginBottom: 6 }}>Subject: {row.subject_line}</div>
                               <pre
                                 style={{
                                   whiteSpace: "pre-wrap",
@@ -927,87 +829,55 @@ export default function BacklinksPage() {
                           );
                         })}
 
-                        {selectedOutreach.length === 0 ? (
-                          <div>No outreach drafts yet.</div>
-                        ) : null}
+                        {selectedOutreach.length === 0 ? <div>No outreach drafts yet.</div> : null}
                       </div>
                     </div>
                   ) : null}
 
                   {activeTab === "tracker" ? (
-                    <div
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 12,
-                        padding: 16,
-                      }}
-                    >
+                    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
                       <h3>Link Tracker</h3>
 
-                      <div
-                        style={{
-                          display: "grid",
-                          gap: 10,
-                          marginBottom: 16,
-                        }}
-                      >
+                      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
                         <input
                           placeholder="Source domain"
                           value={newLink.source_domain}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              source_domain: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, source_domain: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Source URL"
                           value={newLink.source_url}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              source_url: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, source_url: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Target URL"
                           value={newLink.target_url}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              target_url: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, target_url: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Anchor text"
                           value={newLink.anchor_text}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              anchor_text: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, anchor_text: e.target.value }))
                           }
                         />
                         <input
                           placeholder="Acquired date (YYYY-MM-DD)"
                           value={newLink.acquired_at}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              acquired_at: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, acquired_at: e.target.value }))
                           }
                         />
                         <select
                           value={newLink.status}
                           onChange={(e) =>
-                            setNewLink((prev) => ({
-                              ...prev,
-                              status: e.target.value,
-                            }))
+                            setNewLink((prev) => ({ ...prev, status: e.target.value }))
                           }
                         >
                           <option value="pending">pending</option>
@@ -1023,15 +893,9 @@ export default function BacklinksPage() {
                         {selectedLinks.map((link) => (
                           <div
                             key={link.id}
-                            style={{
-                              border: "1px solid #ddd",
-                              borderRadius: 10,
-                              padding: 12,
-                            }}
+                            style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}
                           >
-                            <div style={{ fontWeight: 700 }}>
-                              {link.source_domain}
-                            </div>
+                            <div style={{ fontWeight: 700 }}>{link.source_domain}</div>
                             <div style={{ marginTop: 6 }}>{pill(link.status)}</div>
                             <div style={{ fontSize: 13, marginTop: 6 }}>
                               Source: {link.source_url || "-"}
@@ -1048,21 +912,13 @@ export default function BacklinksPage() {
                           </div>
                         ))}
 
-                        {selectedLinks.length === 0 ? (
-                          <div>No link records yet.</div>
-                        ) : null}
+                        {selectedLinks.length === 0 ? <div>No link records yet.</div> : null}
                       </div>
                     </div>
                   ) : null}
                 </>
               ) : (
-                <div
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: 12,
-                    padding: 16,
-                  }}
-                >
+                <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
                   Create a backlink project first.
                 </div>
               )}
