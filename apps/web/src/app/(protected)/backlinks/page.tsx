@@ -10,7 +10,7 @@ type BlogPost = {
   excerpt?: string | null;
   status: string;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | null;
 };
 
 type BacklinkProject = {
@@ -60,7 +60,40 @@ type BacklinkLink = {
   created_at: string;
 };
 
+type UserSiteRow = {
+  profile?: Record<string, any> | null;
+  site_setup_state?: Record<string, any> | null;
+};
+
+type SiteContext = {
+  brandName: string;
+  websiteUrl: string;
+  niche: string;
+  audience: string;
+  region: string;
+  voice: string;
+  coreOffer: string;
+};
+
+type Suggestion = {
+  domain: string;
+  page_title: string;
+  page_url: string;
+  relevance_reason: string;
+  outreach_angle: string;
+};
+
 type TabKey = "overview" | "opportunities" | "outreach" | "tracker";
+
+const EMPTY_SITE_CONTEXT: SiteContext = {
+  brandName: "our site",
+  websiteUrl: "",
+  niche: "practical business content",
+  audience: "professionals",
+  region: "our market",
+  voice: "practical and credible",
+  coreOffer: "useful expert-led resources",
+};
 
 export default function BacklinksPage() {
   const supabase = supabaseBrowser();
@@ -71,6 +104,7 @@ export default function BacklinksPage() {
   const [opportunities, setOpportunities] = useState<BacklinkOpportunity[]>([]);
   const [outreachRows, setOutreachRows] = useState<BacklinkOutreach[]>([]);
   const [links, setLinks] = useState<BacklinkLink[]>([]);
+  const [userSite, setUserSite] = useState<UserSiteRow | null>(null);
 
   const [selectedPostId, setSelectedPostId] = useState("");
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -128,6 +162,10 @@ export default function BacklinksPage() {
     return links.filter((l) => l.backlink_project_id === selectedProject.id);
   }, [links, selectedProject]);
 
+  const siteContext = useMemo(() => {
+    return extractSiteContext(userSite);
+  }, [userSite]);
+
   useEffect(() => {
     setNotes(selectedProject?.notes || "");
   }, [selectedProject]);
@@ -148,39 +186,47 @@ export default function BacklinksPage() {
         return;
       }
 
-      const [postsRes, projectsRes, oppsRes, outreachRes, linksRes] = await Promise.all([
-        supabase
-          .from("blog_posts")
-          .select("id,title,excerpt,status,created_at,updated_at")
-          .order("created_at", { ascending: false }),
+      const [postsRes, projectsRes, oppsRes, outreachRes, linksRes, siteRes] =
+        await Promise.all([
+          supabase
+            .from("blog_posts")
+            .select("id,title,excerpt,status,created_at,updated_at")
+            .order("created_at", { ascending: false }),
 
-        supabase
-          .from("backlink_projects")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("updated_at", { ascending: false }),
+          supabase
+            .from("backlink_projects")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("updated_at", { ascending: false }),
 
-        supabase
-          .from("backlink_opportunities")
-          .select("*")
-          .order("created_at", { ascending: false }),
+          supabase
+            .from("backlink_opportunities")
+            .select("*")
+            .order("created_at", { ascending: false }),
 
-        supabase
-          .from("backlink_outreach")
-          .select("*")
-          .order("created_at", { ascending: false }),
+          supabase
+            .from("backlink_outreach")
+            .select("*")
+            .order("created_at", { ascending: false }),
 
-        supabase
-          .from("backlink_links")
-          .select("*")
-          .order("created_at", { ascending: false }),
-      ]);
+          supabase
+            .from("backlink_links")
+            .select("*")
+            .order("created_at", { ascending: false }),
+
+          supabase
+            .from("user_sites")
+            .select("profile,site_setup_state")
+            .eq("user_id", user.id)
+            .limit(1),
+        ]);
 
       if (postsRes.error) throw postsRes.error;
       if (projectsRes.error) throw projectsRes.error;
       if (oppsRes.error) throw oppsRes.error;
       if (outreachRes.error) throw outreachRes.error;
       if (linksRes.error) throw linksRes.error;
+      if (siteRes.error) throw siteRes.error;
 
       const nextPosts = (postsRes.data || []) as BlogPost[];
       const nextProjects = (projectsRes.data || []) as BacklinkProject[];
@@ -200,11 +246,14 @@ export default function BacklinksPage() {
         projectIds.has(l.backlink_project_id)
       );
 
+      const nextUserSite = ((siteRes.data || [])[0] || null) as UserSiteRow | null;
+
       setPosts(nextPosts);
       setProjects(nextProjects);
       setOpportunities(nextOpportunities);
       setOutreachRows(nextOutreach);
       setLinks(nextLinks);
+      setUserSite(nextUserSite);
 
       const urlPostId = searchParams.get("postId");
       if (urlPostId && nextPosts.some((p) => p.id === urlPostId)) {
@@ -230,12 +279,46 @@ export default function BacklinksPage() {
     if (/\bhow to\b|\bwhy\b|\bwhat\b/i.test(text)) {
       score += 10;
     }
-    if (/\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b/i.test(text)) {
+    if (
+      /\bSingapore\b|\bMalaysia\b|\bexecutive\b|\bleadership\b|\bmarketing\b|\bAI\b/i.test(
+        text
+      )
+    ) {
       score += 15;
     }
     if ((post.excerpt || "").length > 80) score += 10;
 
     return Math.min(score, 100);
+  }
+
+  async function ensureProjectForSelectedPost(): Promise<BacklinkProject | null> {
+    if (!selectedPost) return null;
+
+    const existing = getProjectForPost(selectedPost.id);
+    if (existing) return existing;
+
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth.user;
+    if (!user) throw new Error("Not signed in.");
+
+    const { data, error } = await supabase
+      .from("backlink_projects")
+      .insert({
+        blog_post_id: selectedPost.id,
+        blog_draft_id: null,
+        user_id: user.id,
+        status: "not_prepared",
+        link_worthy_score: calculateLinkWorthiness(selectedPost),
+        notes: "",
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const created = data as BacklinkProject;
+    setProjects((prev) => [created, ...prev]);
+    return created;
   }
 
   async function createBacklinkProject() {
@@ -251,26 +334,7 @@ export default function BacklinksPage() {
         return;
       }
 
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth.user;
-      if (!user) throw new Error("Not signed in.");
-
-      const { data, error } = await supabase
-        .from("backlink_projects")
-        .insert({
-          blog_post_id: selectedPost.id,
-          blog_draft_id: null,
-          user_id: user.id,
-          status: "not_prepared",
-          link_worthy_score: calculateLinkWorthiness(selectedPost),
-          notes: "",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setProjects((prev) => [data, ...prev]);
+      await ensureProjectForSelectedPost();
       setMessage("Backlink project created.");
     } catch (err: any) {
       setMessage(err?.message || "Failed to create backlink project.");
@@ -330,9 +394,11 @@ export default function BacklinksPage() {
   }
 
   async function addOpportunity() {
-    if (!selectedProject) return;
+    const project = selectedProject || (await ensureProjectForSelectedPost());
+    if (!project) return;
+
     if (!newOpportunity.domain.trim()) {
-      setMessage("Domain is required.");
+      setMessage("Target site / publication is required.");
       return;
     }
 
@@ -343,7 +409,7 @@ export default function BacklinksPage() {
       const { data, error } = await supabase
         .from("backlink_opportunities")
         .insert({
-          backlink_project_id: selectedProject.id,
+          backlink_project_id: project.id,
           domain: newOpportunity.domain.trim(),
           page_title: newOpportunity.page_title.trim() || null,
           page_url: newOpportunity.page_url.trim() || null,
@@ -356,7 +422,30 @@ export default function BacklinksPage() {
 
       if (error) throw error;
 
-      setOpportunities((prev) => [data, ...prev]);
+      const createdOpportunity = data as BacklinkOpportunity;
+      setOpportunities((prev) => [createdOpportunity, ...prev]);
+
+      const draft = buildOutreachDraft(
+        selectedPost!,
+        siteContext,
+        createdOpportunity
+      );
+
+      const outreachInsert = await supabase
+        .from("backlink_outreach")
+        .insert({
+          backlink_opportunity_id: createdOpportunity.id,
+          subject_line: draft.subject_line,
+          message_body: draft.message_body,
+          status: "draft",
+        })
+        .select()
+        .single();
+
+      if (outreachInsert.error) throw outreachInsert.error;
+
+      setOutreachRows((prev) => [outreachInsert.data as BacklinkOutreach, ...prev]);
+
       setNewOpportunity({
         domain: "",
         page_title: "",
@@ -364,59 +453,11 @@ export default function BacklinksPage() {
         relevance_reason: "",
         outreach_angle: "",
       });
-      setMessage("Opportunity added.");
-    } catch (err: any) {
-      setMessage(err?.message || "Failed to add opportunity.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
-  async function createOutreachForOpportunity(opportunity: BacklinkOpportunity) {
-    if (!selectedPost) return;
-
-    setBusy(true);
-    setMessage("");
-
-    try {
-      const existing = outreachRows.find((o) => o.backlink_opportunity_id === opportunity.id);
-      if (existing) {
-        setMessage("Outreach already exists for this opportunity.");
-        setActiveTab("outreach");
-        return;
-      }
-
-      const subjectLine = `Possible resource for ${opportunity.domain}`;
-      const messageBody = [
-        `Hi ${opportunity.domain} team,`,
-        "",
-        `I came across ${opportunity.page_title || opportunity.domain} and thought this post could complement it.`,
-        opportunity.outreach_angle
-          ? `Angle: ${opportunity.outreach_angle}`
-          : "We have a practical resource that may be useful to your readers.",
-        `Post: ${selectedPost.title}`,
-        "",
-        "Open to sending over the link if helpful.",
-      ].join("\n");
-
-      const { data, error } = await supabase
-        .from("backlink_outreach")
-        .insert({
-          backlink_opportunity_id: opportunity.id,
-          subject_line: subjectLine,
-          message_body: messageBody,
-          status: "draft",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setOutreachRows((prev) => [data, ...prev]);
-      setMessage("Outreach draft created.");
+      setMessage("Opportunity and outreach draft added.");
       setActiveTab("outreach");
     } catch (err: any) {
-      setMessage(err?.message || "Failed to create outreach.");
+      setMessage(err?.message || "Failed to add opportunity.");
     } finally {
       setBusy(false);
     }
@@ -449,7 +490,7 @@ export default function BacklinksPage() {
 
       if (error) throw error;
 
-      setLinks((prev) => [data, ...prev]);
+      setLinks((prev) => [data as BacklinkLink, ...prev]);
       setNewLink({
         source_domain: "",
         source_url: "",
@@ -466,100 +507,280 @@ export default function BacklinksPage() {
     }
   }
 
-  async function generateAiSuggestionsForPost() {
-    if (!selectedProject || !selectedPost) return;
+  async function generateAiSuggestionsAndOutreach() {
+    if (!selectedPost) return;
 
     setBusy(true);
     setMessage("");
 
     try {
-      const suggestions = buildSmartSuggestions(selectedPost);
+      const project = selectedProject || (await ensureProjectForSelectedPost());
+      if (!project) throw new Error("Could not create or load backlink project.");
+
+      const suggestions = buildSmartSuggestions(selectedPost, siteContext);
+
       if (!suggestions.length) {
-        setMessage("No suggestions generated.");
+        setMessage("No AI suggestions generated.");
         return;
       }
 
-      const rows = suggestions.map((item) => ({
-        backlink_project_id: selectedProject.id,
+      const existingDomains = new Set(
+        selectedOpportunities.map((o) => o.domain.trim().toLowerCase())
+      );
+
+      const uniqueSuggestions = suggestions.filter(
+        (item) => !existingDomains.has(item.domain.trim().toLowerCase())
+      );
+
+      if (!uniqueSuggestions.length) {
+        setMessage("Suggestions already exist for this post.");
+        setActiveTab("outreach");
+        return;
+      }
+
+      const opportunityRows = uniqueSuggestions.map((item) => ({
+        backlink_project_id: project.id,
         domain: item.domain,
         page_title: item.page_title,
-        page_url: item.page_url,
+        page_url: item.page_url || null,
         relevance_reason: item.relevance_reason,
         outreach_angle: item.outreach_angle,
         status: "planned",
       }));
 
-      const { data, error } = await supabase
+      const oppInsert = await supabase
         .from("backlink_opportunities")
-        .insert(rows)
+        .insert(opportunityRows)
         .select();
 
-      if (error) throw error;
+      if (oppInsert.error) throw oppInsert.error;
 
-      setOpportunities((prev) => [...(data || []), ...prev]);
-      setMessage("AI backlink suggestions added.");
-      setActiveTab("opportunities");
+      const createdOpportunities = (oppInsert.data || []) as BacklinkOpportunity[];
+      setOpportunities((prev) => [...createdOpportunities, ...prev]);
+
+      const outreachRowsToInsert = createdOpportunities.map((opportunity) => {
+        const draft = buildOutreachDraft(selectedPost, siteContext, opportunity);
+        return {
+          backlink_opportunity_id: opportunity.id,
+          subject_line: draft.subject_line,
+          message_body: draft.message_body,
+          status: "draft",
+        };
+      });
+
+      const outreachInsert = await supabase
+        .from("backlink_outreach")
+        .insert(outreachRowsToInsert)
+        .select();
+
+      if (outreachInsert.error) throw outreachInsert.error;
+
+      const createdOutreach = (outreachInsert.data || []) as BacklinkOutreach[];
+      setOutreachRows((prev) => [...createdOutreach, ...prev]);
+
+      setMessage(
+        `Generated ${createdOpportunities.length} opportunities and ${createdOutreach.length} outreach drafts.`
+      );
+      setActiveTab("outreach");
     } catch (err: any) {
-      setMessage(err?.message || "Failed to generate AI suggestions.");
+      setMessage(err?.message || "Failed to generate AI backlink opportunities.");
     } finally {
       setBusy(false);
     }
   }
 
-  function buildSmartSuggestions(post: BlogPost) {
+  function buildSmartSuggestions(post: BlogPost, site: SiteContext): Suggestion[] {
     const text = `${post.title || ""} ${post.excerpt || ""}`.toLowerCase();
-    const suggestions: {
-      domain: string;
-      page_title: string;
-      page_url: string;
-      relevance_reason: string;
-      outreach_angle: string;
-    }[] = [];
+    const suggestions: Suggestion[] = [];
 
-    if (text.includes("executive") || text.includes("leadership")) {
+    const region = site.region || "regional";
+    const audience = site.audience || "professionals";
+    const niche = site.niche || "business";
+    const brand = site.brandName || "our site";
+
+    const hasLeadership =
+      text.includes("leadership") || text.includes("executive");
+    const hasMarketing = text.includes("marketing");
+    const hasAi = text.includes("ai");
+    const hasSingapore = text.includes("singapore");
+    const hasMalaysia = text.includes("malaysia");
+
+    suggestions.push({
+      domain: `${region} business publication`,
+      page_title: `${region} business insights`,
+      page_url: "",
+      relevance_reason: `This post is relevant to ${region}-focused readers interested in ${niche}.`,
+      outreach_angle: `Position the article as a practical resource for ${audience} in ${region}.`,
+    });
+
+    suggestions.push({
+      domain: `${niche} roundup / curated resource page`,
+      page_title: `${niche} resource roundup`,
+      page_url: "",
+      relevance_reason: `The post is educational and could fit a curated roundup or expert resource page.`,
+      outreach_angle: `Lead with clarity, usefulness, and direct value for readers looking for concise expert guidance.`,
+    });
+
+    if (hasLeadership) {
       suggestions.push({
-        domain: "leadershipinsights.example.com",
-        page_title: "Leadership Resources",
+        domain: `executive leadership resource hub`,
+        page_title: `leadership resources`,
         page_url: "",
-        relevance_reason:
-          "This post is leadership-oriented and may fit executive development or management resources.",
-        outreach_angle: "Lead with executive relevance and practical takeaways.",
+        relevance_reason: `This post speaks directly to executives, leadership development, and decision-making themes.`,
+        outreach_angle: `Present it as a practical leadership reference rather than a generic opinion piece.`,
       });
     }
 
-    if (text.includes("singapore")) {
+    if (hasMarketing || hasAi) {
       suggestions.push({
-        domain: "sgbusinesshub.example.com",
-        page_title: "Singapore Business Insights",
+        domain: `AI and digital strategy publication`,
+        page_title: `digital growth library`,
         page_url: "",
-        relevance_reason:
-          "This post has local Singapore relevance and may fit business publications serving that market.",
-        outreach_angle:
-          "Position it as a locally relevant resource for Singapore professionals.",
+        relevance_reason: `The post overlaps with current AI, digital growth, and marketing strategy conversations.`,
+        outreach_angle: `Frame it as a grounded business-use article, not hype-driven AI commentary.`,
       });
     }
 
-    if (text.includes("marketing") || text.includes("ai")) {
+    if (hasSingapore || hasMalaysia) {
       suggestions.push({
-        domain: "digitalgrowthguide.example.com",
-        page_title: "Digital Growth Library",
+        domain: `Singapore / Malaysia professional publication`,
+        page_title: `regional professional insights`,
         page_url: "",
-        relevance_reason:
-          "The content aligns with digital growth, AI, and practical strategy topics.",
-        outreach_angle: "Present it as a practical implementation guide.",
+        relevance_reason: `The post has direct local relevance and may fit publications serving Singapore and Malaysia audiences.`,
+        outreach_angle: `Pitch the article as locally relevant, practical, and immediately useful for professionals in the region.`,
       });
     }
 
     suggestions.push({
-      domain: "industryroundup.example.com",
-      page_title: "Industry Resource Roundup",
+      domain: `${brand} guest contribution target`,
+      page_title: `guest contribution / expert opinion`,
       page_url: "",
-      relevance_reason:
-        "This post appears educational and suitable for roundup or resource pages.",
-      outreach_angle: "Offer the article as a concise resource with direct reader value.",
+      relevance_reason: `This post can also be reframed as a guest contribution to extend reach and brand authority.`,
+      outreach_angle: `Offer a shortened adapted version or summary tailored to the publication’s readers.`,
     });
 
-    return suggestions.slice(0, 5);
+    return dedupeSuggestions(suggestions).slice(0, 5);
+  }
+
+  function buildOutreachDraft(
+    post: BlogPost,
+    site: SiteContext,
+    opportunity: Pick<
+      BacklinkOpportunity,
+      "domain" | "page_title" | "relevance_reason" | "outreach_angle"
+    >
+  ) {
+    const brand = site.brandName || "our site";
+    const website = site.websiteUrl ? ` (${site.websiteUrl})` : "";
+    const audience = site.audience || "professionals";
+    const niche = site.niche || "business";
+    const region = site.region || "our market";
+    const coreOffer = site.coreOffer || "useful expert-led resources";
+
+    const subject_line = `Possible resource fit: ${post.title}`;
+
+    const message_body = [
+      `Hi ${opportunity.domain} team,`,
+      "",
+      `I'm reaching out from ${brand}${website}. We publish ${niche} content for ${audience} in ${region}.`,
+      "",
+      `We recently published: "${post.title}"`,
+      post.excerpt ? `Summary: ${post.excerpt}` : "",
+      "",
+      `Why it may fit your audience: ${opportunity.relevance_reason || "It is practical, relevant, and audience-focused."}`,
+      `Suggested angle: ${opportunity.outreach_angle || "A concise expert resource your readers can apply immediately."}`,
+      "",
+      `The piece supports our broader focus on ${coreOffer}.`,
+      "",
+      `If helpful, I'm happy to send over the link or a short adapted summary for review.`,
+      "",
+      `Best,`,
+      `${brand}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return { subject_line, message_body };
+  }
+
+  function dedupeSuggestions(items: Suggestion[]) {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = item.domain.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function extractSiteContext(row: UserSiteRow | null): SiteContext {
+    if (!row) return EMPTY_SITE_CONTEXT;
+
+    const profile = row.profile || {};
+    const siteSetup = row.site_setup_state || {};
+
+    const source = {
+      ...siteSetup,
+      ...profile,
+    };
+
+    const pick = (...keys: string[]) => {
+      for (const key of keys) {
+        const value =
+          source?.[key] ??
+          profile?.[key] ??
+          siteSetup?.[key] ??
+          profile?.branding?.[key] ??
+          profile?.business?.[key] ??
+          profile?.site?.[key] ??
+          siteSetup?.site?.[key] ??
+          siteSetup?.profile?.[key];
+
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+      return "";
+    };
+
+    const brandName =
+      pick(
+        "brand_name",
+        "site_name",
+        "business_name",
+        "company_name",
+        "name"
+      ) || EMPTY_SITE_CONTEXT.brandName;
+
+    const websiteUrl =
+      pick("website_url", "site_url", "url", "domain") || EMPTY_SITE_CONTEXT.websiteUrl;
+
+    const niche =
+      pick("niche", "industry", "topic", "site_topic", "business_type") ||
+      EMPTY_SITE_CONTEXT.niche;
+
+    const audience =
+      pick("target_audience", "audience", "ideal_reader", "market") ||
+      EMPTY_SITE_CONTEXT.audience;
+
+    const region =
+      pick("region", "location", "country", "market_region") ||
+      EMPTY_SITE_CONTEXT.region;
+
+    const voice =
+      pick("voice", "tone", "brand_voice") || EMPTY_SITE_CONTEXT.voice;
+
+    const coreOffer =
+      pick("core_offer", "offer", "positioning", "value_proposition") ||
+      EMPTY_SITE_CONTEXT.coreOffer;
+
+    return {
+      brandName,
+      websiteUrl,
+      niche,
+      audience,
+      region,
+      voice,
+      coreOffer,
+    };
   }
 
   function pill(status: string) {
@@ -584,7 +805,7 @@ export default function BacklinksPage() {
         Backlinks Workspace
       </h1>
       <p style={{ marginBottom: 20, opacity: 0.7 }}>
-        Turn blog posts into authority assets, outreach opportunities, and tracked backlinks.
+        Turn blog posts into authority assets, smarter outreach opportunities, and tracked backlinks.
       </p>
 
       {message ? (
@@ -659,9 +880,14 @@ export default function BacklinksPage() {
 
                 <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {!selectedProject ? (
-                    <button onClick={createBacklinkProject} disabled={busy}>
-                      {busy ? "Working..." : "Create Backlink Project"}
-                    </button>
+                    <>
+                      <button onClick={createBacklinkProject} disabled={busy}>
+                        {busy ? "Working..." : "Create Backlink Project"}
+                      </button>
+                      <button onClick={generateAiSuggestionsAndOutreach} disabled={busy}>
+                        AI Backlink Finder
+                      </button>
+                    </>
                   ) : (
                     <>
                       <button onClick={() => updateProjectStatus("ready")} disabled={busy}>
@@ -673,7 +899,7 @@ export default function BacklinksPage() {
                       >
                         Start Outreach
                       </button>
-                      <button onClick={generateAiSuggestionsForPost} disabled={busy}>
+                      <button onClick={generateAiSuggestionsAndOutreach} disabled={busy}>
                         AI Backlink Finder
                       </button>
                     </>
@@ -705,6 +931,27 @@ export default function BacklinksPage() {
                       </div>
                       <div style={{ marginBottom: 16 }}>Links tracked: {selectedLinks.length}</div>
 
+                      <div
+                        style={{
+                          marginBottom: 16,
+                          padding: 12,
+                          border: "1px solid #ddd",
+                          borderRadius: 8,
+                          background: "#fafafa",
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>Site profile</div>
+                        <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                          <div><strong>Brand:</strong> {siteContext.brandName}</div>
+                          <div><strong>Website:</strong> {siteContext.websiteUrl || "-"}</div>
+                          <div><strong>Niche:</strong> {siteContext.niche}</div>
+                          <div><strong>Audience:</strong> {siteContext.audience}</div>
+                          <div><strong>Region:</strong> {siteContext.region}</div>
+                          <div><strong>Voice:</strong> {siteContext.voice}</div>
+                          <div><strong>Core offer:</strong> {siteContext.coreOffer}</div>
+                        </div>
+                      </div>
+
                       <div style={{ marginBottom: 8, fontWeight: 600 }}>Notes</div>
                       <textarea
                         value={notes}
@@ -724,7 +971,7 @@ export default function BacklinksPage() {
 
                       <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
                         <input
-                          placeholder="Domain"
+                          placeholder="Target site / publication"
                           value={newOpportunity.domain}
                           onChange={(e) =>
                             setNewOpportunity((prev) => ({ ...prev, domain: e.target.value }))
@@ -767,7 +1014,7 @@ export default function BacklinksPage() {
                           rows={3}
                         />
                         <button onClick={addOpportunity} disabled={busy}>
-                          Add Opportunity
+                          Add Opportunity + Draft
                         </button>
                       </div>
 
@@ -785,15 +1032,9 @@ export default function BacklinksPage() {
                             <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>
                               {opportunity.relevance_reason || "No relevance reason"}
                             </div>
-                            <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 10 }}>
+                            <div style={{ fontSize: 13, opacity: 0.8 }}>
                               {opportunity.outreach_angle || "No outreach angle"}
                             </div>
-                            <button
-                              onClick={() => createOutreachForOpportunity(opportunity)}
-                              disabled={busy}
-                            >
-                              Create Outreach Draft
-                            </button>
                           </div>
                         ))}
 
@@ -804,7 +1045,7 @@ export default function BacklinksPage() {
 
                   {activeTab === "outreach" ? (
                     <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-                      <h3>Outreach</h3>
+                      <h3>Outreach drafts</h3>
 
                       <div style={{ display: "grid", gap: 12 }}>
                         {selectedOutreach.map((row) => {
