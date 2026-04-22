@@ -153,14 +153,6 @@ function Card({
             >
               Create LinkedIn Post
             </Link>
-
-            <Link
-              href={`/backlinks?postId=${encodeURIComponent(post.id)}`}
-              onClick={(e) => e.stopPropagation()}
-              style={{ color: "#9ad", textDecoration: "underline" }}
-            >
-              Backlinks
-            </Link>
           </div>
 
           <div
