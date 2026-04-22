@@ -14,6 +14,8 @@ export default async function ProtectedLayout({
 
   if (!user) redirect("/login");
 
+  const showBacklinks = process.env.NEXT_PUBLIC_ENABLE_BACKLINKS === "true";
+
   async function signOut() {
     "use server";
     const supabase = supabaseServer();
@@ -38,7 +40,9 @@ export default async function ProtectedLayout({
           <Link href="/keywords">Keywords</Link>
           <Link href="/trends">Trends</Link>
           <Link href="/library">Library</Link>
-          <Link href="/backlinks">Backlinks</Link>
+          {showBacklinks ? (
+            <Link href="/backlinks">Backlinks (Beta)</Link>
+          ) : null}
           <Link href="/settings">Settings</Link>
         </nav>
 
