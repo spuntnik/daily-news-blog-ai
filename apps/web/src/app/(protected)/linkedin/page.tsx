@@ -171,7 +171,7 @@ export default function LinkedInPage() {
       });
 
       setGeneratedDrafts(drafts);
-      setMessage(`Generated ${drafts.length} LinkedIn post angles.`);
+      setMessage(`Generated ${drafts.length} LinkedIn post angles in ${toneMode} / ${lengthMode} mode.`);
     } catch (err: any) {
       setMessage(err?.message || "Failed to generate LinkedIn drafts.");
     } finally {
@@ -335,17 +335,13 @@ export default function LinkedInPage() {
             <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
               <button
                 onClick={() => setSourceMode("blog")}
-                style={{
-                  background: sourceMode === "blog" ? "#f2f2f2" : "#fff",
-                }}
+                style={{ background: sourceMode === "blog" ? "#f2f2f2" : "#fff" }}
               >
                 Use Blog
               </button>
               <button
                 onClick={() => setSourceMode("keyword")}
-                style={{
-                  background: sourceMode === "keyword" ? "#f2f2f2" : "#fff",
-                }}
+                style={{ background: sourceMode === "keyword" ? "#f2f2f2" : "#fff" }}
               >
                 Use Keyword
               </button>
@@ -479,7 +475,7 @@ export default function LinkedInPage() {
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>Generated Drafts</div>
                 <div style={{ fontSize: 14, opacity: 0.75 }}>
-                  3 recognition-led post angles designed to feel more human and less generic.
+                  The same source should produce different outputs when tone or length changes.
                 </div>
               </div>
 
@@ -661,107 +657,506 @@ function buildLinkedInDrafts({
   toneMode: string;
   lengthMode: string;
 }): GeneratedDraft[] {
-  const conciseSummary =
+  const baseSummary =
     summary?.trim() ||
-    `This topic matters because it touches the tension many ${site.audience.toLowerCase()} feel but rarely say out loud.`;
+    `This topic matters because it touches a tension many ${site.audience.toLowerCase()} feel but rarely say out loud.`;
+
+  if (toneMode === "Blair Warren") {
+    return [
+      buildBlairDreamDraft(topic, baseSummary, lengthMode),
+      buildBlairValidationDraft(topic, baseSummary, lengthMode),
+      buildBlairEnemyDraft(topic, baseSummary, lengthMode),
+    ];
+  }
+
+  if (toneMode === "Reflective") {
+    return [
+      buildReflectiveQuietDraft(topic, baseSummary, lengthMode),
+      buildReflectiveIdentityDraft(topic, baseSummary, lengthMode),
+      buildReflectivePermissionDraft(topic, baseSummary, lengthMode),
+    ];
+  }
+
+  if (toneMode === "Thought Leadership") {
+    return [
+      buildThoughtLeadershipTrendDraft(topic, baseSummary, lengthMode),
+      buildThoughtLeadershipMisreadDraft(topic, baseSummary, lengthMode),
+      buildThoughtLeadershipShiftDraft(topic, baseSummary, lengthMode),
+    ];
+  }
 
   return [
-    buildIdentityShiftDraft(topic, conciseSummary, toneMode, lengthMode),
-    buildValidationDraft(topic, conciseSummary, toneMode, lengthMode),
-    buildContrarianDraft(topic, conciseSummary, toneMode, lengthMode),
+    buildContrarianMythDraft(topic, baseSummary, lengthMode),
+    buildContrarianCostDraft(topic, baseSummary, lengthMode),
+    buildContrarianSignalDraft(topic, baseSummary, lengthMode),
   ];
 }
 
-function buildIdentityShiftDraft(
-  topic: string,
-  summary: string,
-  toneMode: string,
-  lengthMode: string
-): GeneratedDraft {
+function buildBlairDreamDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
   const hook = [
-    `You didn’t hit a ceiling because you lack strategy.`,
-    `You hit it because the version of you that got results before may not be enough for what comes next.`,
+    `Most people don’t want another strategy.`,
+    `They want the version of life and work that strategy was supposed to give them.`,
   ].join("\n");
 
-  const body = buildBody(
-    [
-      `A lot of capable people keep trying to solve a next-level problem with an old identity.`,
-      `That’s why progress starts to feel heavier, even when effort goes up.`,
-      `What used to make you dependable can quietly become what keeps you overextended, overcareful, or overresponsible.`,
-      summary,
-      `The painful part is this: most people don’t need more information first. They need permission to stop operating from a pattern they’ve already outgrown.`,
-    ],
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why topics like "${topic}" matter more than most people think.`,
+        `People are not just chasing better tactics. They are trying to recover clarity, momentum, and self-respect.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why topics like "${topic}" matter more than most people think.`,
+        `People are not just chasing better tactics. They are trying to recover clarity, momentum, and self-respect.`,
+        `A lot of smart people are exhausted not because they lack discipline, but because they’ve been pursuing results in ways that quietly disconnect them from who they want to become.`,
+        summary,
+        `When a message speaks to that deeper frustration, it stops feeling like content and starts feeling like recognition.`,
+      ],
+      Long: [
+        `That’s why topics like "${topic}" matter more than most people think.`,
+        `People are not just chasing better tactics. They are trying to recover clarity, momentum, and self-respect.`,
+        `A lot of smart people are exhausted not because they lack discipline, but because they’ve been pursuing results in ways that quietly disconnect them from who they want to become.`,
+        `The external problem gets attention.`,
+        `The internal cost is what actually drives change.`,
+        summary,
+        `When a message speaks to that deeper frustration, it stops feeling like content and starts feeling like recognition.`,
+      ],
+    },
     lengthMode
   );
 
-  const cta = `What’s one way of thinking that got you here… but might not take you where you want to go next?`;
+  const cta = `What are people really hoping to get back when they say they want better results?`;
 
-  return finalizeDraft("Identity Shift", toneMode, hook, body, cta);
+  return finalizeDraft("Dream Beneath the Goal", "Blair Warren", hook, body, cta);
 }
 
-function buildValidationDraft(
-  topic: string,
-  summary: string,
-  toneMode: string,
-  lengthMode: string
-): GeneratedDraft {
+function buildBlairValidationDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
   const hook = [
-    `Most people don’t stall because they’re lazy.`,
-    `They stall because they’re still being loyal to a way of working that used to be rewarded.`,
+    `People don’t need to be shamed into change.`,
+    `They need someone to explain why they ended up here in the first place.`,
   ].join("\n");
 
-  const body = buildBody(
-    [
-      `That’s why smart, hardworking people can still feel stuck.`,
-      `Not because they’re incapable.`,
-      `Because they were trained to survive one level of pressure, then expected to lead through a completely different one.`,
-      `And when the old methods stop working, they often blame themselves first.`,
-      summary,
-      `Sometimes the problem isn’t effort. It’s that the identity behind the effort no longer fits the role, season, or responsibility.`,
-    ],
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s what makes "${topic}" powerful when handled properly.`,
+        `Instead of telling people what they did wrong, it helps them see that they were playing by rules that no longer serve them.`,
+        summary,
+      ],
+      Standard: [
+        `That’s what makes "${topic}" powerful when handled properly.`,
+        `Instead of telling people what they did wrong, it helps them see that they were playing by rules that no longer serve them.`,
+        `Most people were not careless. They were responsible, loyal, and trying to do the right thing with the model they were given.`,
+        summary,
+        `The moment people feel understood instead of judged, they become open to a better path.`,
+      ],
+      Long: [
+        `That’s what makes "${topic}" powerful when handled properly.`,
+        `Instead of telling people what they did wrong, it helps them see that they were playing by rules that no longer serve them.`,
+        `Most people were not careless. They were responsible, loyal, and trying to do the right thing with the model they were given.`,
+        `And when that model stops working, they often turn the blame inward.`,
+        `That is where good messaging changes everything.`,
+        summary,
+        `The moment people feel understood instead of judged, they become open to a better path.`,
+      ],
+    },
     lengthMode
   );
 
-  const cta = `What have you been blaming yourself for… that might actually be a sign you’ve outgrown an old pattern?`;
+  const cta = `What if the problem wasn’t a lack of effort — but loyalty to an outdated way of operating?`;
 
-  return finalizeDraft("Validation + Tension", toneMode, hook, body, cta);
+  return finalizeDraft("Justify the Struggle", "Blair Warren", hook, body, cta);
 }
 
-function buildContrarianDraft(
-  topic: string,
-  summary: string,
-  toneMode: string,
-  lengthMode: string
-): GeneratedDraft {
+function buildBlairEnemyDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
   const hook = [
-    `The next breakthrough usually doesn’t come from doing more.`,
-    `It comes from seeing what no longer deserves your loyalty.`,
+    `A lot of people are not failing because they’re weak.`,
+    `They’re struggling because the system rewards the wrong things for too long.`,
   ].join("\n");
 
-  const body = buildBody(
-    [
-      `That’s what makes topics like "${topic}" more important than most people realise.`,
-      `Because the surface issue is rarely the real issue.`,
-      `Behind performance problems, hesitation, burnout, or inconsistency, there is usually a hidden attachment to an identity, a role, or a rule that once felt safe.`,
-      summary,
-      `The hard truth is that old success patterns often feel responsible right up until they start limiting your future.`,
-    ],
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why "${topic}" hits a nerve.`,
+        `It exposes the cost of staying loyal to patterns that once looked responsible but now quietly limit growth.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why "${topic}" hits a nerve.`,
+        `It exposes the cost of staying loyal to patterns that once looked responsible but now quietly limit growth.`,
+        `The real enemy is not always laziness, lack of intelligence, or lack of ambition.`,
+        `Sometimes it’s the inherited script people keep obeying long after it stops serving them.`,
+        summary,
+      ],
+      Long: [
+        `That’s why "${topic}" hits a nerve.`,
+        `It exposes the cost of staying loyal to patterns that once looked responsible but now quietly limit growth.`,
+        `The real enemy is not always laziness, lack of intelligence, or lack of ambition.`,
+        `Sometimes it’s the inherited script people keep obeying long after it stops serving them.`,
+        `And because that script feels familiar, they mistake it for truth.`,
+        summary,
+        `The more clearly you name the false loyalty, the more powerful the message becomes.`,
+      ],
+    },
     lengthMode
   );
 
-  const cta = `What are you still holding onto because it once worked… even though it may be costing you now?`;
+  const cta = `What outdated script do people keep obeying because it still looks respectable on the surface?`;
 
-  return finalizeDraft("Contrarian Realisation", toneMode, hook, body, cta);
+  return finalizeDraft("Name the Hidden Enemy", "Blair Warren", hook, body, cta);
 }
 
-function buildBody(lines: string[], lengthMode: string) {
-  let selected = lines;
+function buildReflectiveQuietDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `Sometimes the real shift doesn’t begin with action.`,
+    `It begins with finally telling the truth about what no longer fits.`,
+  ].join("\n");
 
-  if (lengthMode === "Short") selected = lines.slice(0, 3);
-  if (lengthMode === "Standard") selected = lines.slice(0, 5);
-  if (lengthMode === "Long") selected = lines;
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why "${topic}" can land so deeply.`,
+        `Not because it gives people more to do, but because it gives language to something they’ve been carrying quietly.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why "${topic}" can land so deeply.`,
+        `Not because it gives people more to do, but because it gives language to something they’ve been carrying quietly.`,
+        `A lot of capable people don’t need another push. They need a moment of honesty.`,
+        summary,
+        `Once something is named clearly, it becomes much harder to keep pretending it isn’t there.`,
+      ],
+      Long: [
+        `That’s why "${topic}" can land so deeply.`,
+        `Not because it gives people more to do, but because it gives language to something they’ve been carrying quietly.`,
+        `A lot of capable people don’t need another push. They need a moment of honesty.`,
+        `They need room to admit that what used to feel aligned now feels heavy.`,
+        `That is often where change starts.`,
+        summary,
+        `Once something is named clearly, it becomes much harder to keep pretending it isn’t there.`,
+      ],
+    },
+    lengthMode
+  );
 
-  return selected.join("\n\n");
+  const cta = `What truth have you been sensing quietly, but haven’t fully admitted yet?`;
+
+  return finalizeDraft("Quiet Recognition", "Reflective", hook, body, cta);
+}
+
+function buildReflectiveIdentityDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `You can be deeply capable and still feel misaligned.`,
+    `Those two things are not a contradiction.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s part of what makes "${topic}" so important.`,
+        `Sometimes the issue is not competence. It’s that your current way of operating no longer reflects who you are becoming.`,
+        summary,
+      ],
+      Standard: [
+        `That’s part of what makes "${topic}" so important.`,
+        `Sometimes the issue is not competence. It’s that your current way of operating no longer reflects who you are becoming.`,
+        `A lot of people feel guilt before they feel clarity.`,
+        `They assume friction means failure, when it may actually be a sign of growth that has outpaced an old identity.`,
+        summary,
+      ],
+      Long: [
+        `That’s part of what makes "${topic}" so important.`,
+        `Sometimes the issue is not competence. It’s that your current way of operating no longer reflects who you are becoming.`,
+        `A lot of people feel guilt before they feel clarity.`,
+        `They assume friction means failure, when it may actually be a sign of growth that has outpaced an old identity.`,
+        `That is why certain seasons feel confusing before they feel liberating.`,
+        summary,
+        `Not every tension is a warning. Some tensions are invitations.`,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `Where in your life are you mistaking misalignment for inadequacy?`;
+
+  return finalizeDraft("Identity Misalignment", "Reflective", hook, body, cta);
+}
+
+function buildReflectivePermissionDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `Growth often looks messy before it looks obvious.`,
+    `That doesn’t make it wrong.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s one reason "${topic}" matters.`,
+        `It can give people permission to stop forcing themselves into patterns that used to work but no longer feel true.`,
+        summary,
+      ],
+      Standard: [
+        `That’s one reason "${topic}" matters.`,
+        `It can give people permission to stop forcing themselves into patterns that used to work but no longer feel true.`,
+        `A lot of people do not need permission to work harder. They need permission to change shape without calling it failure.`,
+        summary,
+        `That shift alone can be enough to change the way they move forward.`,
+      ],
+      Long: [
+        `That’s one reason "${topic}" matters.`,
+        `It can give people permission to stop forcing themselves into patterns that used to work but no longer feel true.`,
+        `A lot of people do not need permission to work harder. They need permission to change shape without calling it failure.`,
+        `They need to know that letting go of one version of success is not betrayal.`,
+        `Sometimes it is maturity.`,
+        summary,
+        `That shift alone can be enough to change the way they move forward.`,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `What would change if you stopped treating evolution as disloyalty?`;
+
+  return finalizeDraft("Permission to Evolve", "Reflective", hook, body, cta);
+}
+
+function buildThoughtLeadershipTrendDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `The most valuable shifts in leadership are rarely tactical first.`,
+    `They are interpretive.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why "${topic}" deserves more serious attention.`,
+        `What leaders notice, tolerate, and normalise often shapes outcomes long before any formal strategy does.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why "${topic}" deserves more serious attention.`,
+        `What leaders notice, tolerate, and normalise often shapes outcomes long before any formal strategy does.`,
+        `In many organisations, the visible issue gets all the focus while the interpretive habits underneath it go untouched.`,
+        summary,
+        `That is usually where the deeper leverage sits.`,
+      ],
+      Long: [
+        `That’s why "${topic}" deserves more serious attention.`,
+        `What leaders notice, tolerate, and normalise often shapes outcomes long before any formal strategy does.`,
+        `In many organisations, the visible issue gets all the focus while the interpretive habits underneath it go untouched.`,
+        `The result is predictable: more intervention, less real change.`,
+        `The sharper question is not only what people are doing.`,
+        `It is how they are making sense of what they are doing.`,
+        summary,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `What are leaders still treating as a tactical issue when it is actually an interpretive one?`;
+
+  return finalizeDraft("Interpretive Leadership Shift", "Thought Leadership", hook, body, cta);
+}
+
+function buildThoughtLeadershipMisreadDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `One of the biggest mistakes in professional development is misdiagnosis.`,
+    `People try to fix what is visible and ignore what is driving it.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That is why "${topic}" is more than a surface conversation.`,
+        `When the diagnosis is shallow, the solution becomes performative.`,
+        summary,
+      ],
+      Standard: [
+        `That is why "${topic}" is more than a surface conversation.`,
+        `When the diagnosis is shallow, the solution becomes performative.`,
+        `Many leaders are not short on frameworks. They are short on accurate interpretation.`,
+        summary,
+        `That difference changes the quality of every downstream decision.`,
+      ],
+      Long: [
+        `That is why "${topic}" is more than a surface conversation.`,
+        `When the diagnosis is shallow, the solution becomes performative.`,
+        `Many leaders are not short on frameworks. They are short on accurate interpretation.`,
+        `And when interpretation is weak, effort multiplies while effectiveness stalls.`,
+        `This is where more mature leadership begins: not with more motion, but with better reading of what is actually going on.`,
+        summary,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `Where are we still solving symptoms because they are easier to discuss than the real driver?`;
+
+  return finalizeDraft("The Cost of Misdiagnosis", "Thought Leadership", hook, body, cta);
+}
+
+function buildThoughtLeadershipShiftDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `Real authority does not come from having the most answers.`,
+    `It comes from naming the shift others have sensed but not yet articulated.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That is what makes "${topic}" strategically useful.`,
+        `When you name the shift accurately, people stop hearing information and start hearing relevance.`,
+        summary,
+      ],
+      Standard: [
+        `That is what makes "${topic}" strategically useful.`,
+        `When you name the shift accurately, people stop hearing information and start hearing relevance.`,
+        `Strong thought leadership does not flood people with insight.`,
+        `It sharpens their ability to interpret what they were already living through.`,
+        summary,
+      ],
+      Long: [
+        `That is what makes "${topic}" strategically useful.`,
+        `When you name the shift accurately, people stop hearing information and start hearing relevance.`,
+        `Strong thought leadership does not flood people with insight.`,
+        `It sharpens their ability to interpret what they were already living through.`,
+        `That is why some content gets politely consumed while other content changes the way people think.`,
+        summary,
+        `The difference is not volume. It is precision of framing.`,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `What shift does your audience already feel — but still lacks language for?`;
+
+  return finalizeDraft("Name the Shift", "Thought Leadership", hook, body, cta);
+}
+
+function buildContrarianMythDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `The usual advice sounds good because it is familiar.`,
+    `That does not mean it is still useful.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why "${topic}" deserves a more honest conversation.`,
+        `A lot of accepted advice keeps people busy while quietly preserving the problem.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why "${topic}" deserves a more honest conversation.`,
+        `A lot of accepted advice keeps people busy while quietly preserving the problem.`,
+        `The most dangerous ideas are not always obviously wrong.`,
+        `They are the ones that still sound reasonable long after they stop producing results.`,
+        summary,
+      ],
+      Long: [
+        `That’s why "${topic}" deserves a more honest conversation.`,
+        `A lot of accepted advice keeps people busy while quietly preserving the problem.`,
+        `The most dangerous ideas are not always obviously wrong.`,
+        `They are the ones that still sound reasonable long after they stop producing results.`,
+        `That is what makes certain patterns so hard to confront.`,
+        summary,
+        `Familiarity protects weak ideas from scrutiny.`,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `Which piece of accepted advice still sounds smart — but no longer produces anything worth defending?`;
+
+  return finalizeDraft("Challenge the Accepted Myth", "Contrarian", hook, body, cta);
+}
+
+function buildContrarianCostDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `Not every responsible-looking decision is actually responsible.`,
+    `Some are just expensive habits with good branding.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That’s why "${topic}" matters.`,
+        `A pattern can look disciplined on the outside while quietly draining momentum, confidence, or relevance underneath.`,
+        summary,
+      ],
+      Standard: [
+        `That’s why "${topic}" matters.`,
+        `A pattern can look disciplined on the outside while quietly draining momentum, confidence, or relevance underneath.`,
+        `A lot of people keep defending costly habits because the habit still carries social approval.`,
+        summary,
+        `But approval and effectiveness are not the same thing.`,
+      ],
+      Long: [
+        `That’s why "${topic}" matters.`,
+        `A pattern can look disciplined on the outside while quietly draining momentum, confidence, or relevance underneath.`,
+        `A lot of people keep defending costly habits because the habit still carries social approval.`,
+        `It looks mature. It sounds responsible. It feels safe.`,
+        `And that is exactly why it survives longer than it should.`,
+        summary,
+        `But approval and effectiveness are not the same thing.`,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `What habit still looks responsible on paper — but is getting more expensive every quarter?`;
+
+  return finalizeDraft("The Hidden Cost", "Contrarian", hook, body, cta);
+}
+
+function buildContrarianSignalDraft(topic: string, summary: string, lengthMode: string): GeneratedDraft {
+  const hook = [
+    `What people call resistance is often information.`,
+    `They just do not know how to read it yet.`,
+  ].join("\n");
+
+  const body = bodyByLength(
+    {
+      Short: [
+        `That changes the way "${topic}" should be handled.`,
+        `Not every hesitation is a weakness. Sometimes it is a signal that the current approach is misaligned.`,
+        summary,
+      ],
+      Standard: [
+        `That changes the way "${topic}" should be handled.`,
+        `Not every hesitation is a weakness. Sometimes it is a signal that the current approach is misaligned.`,
+        `The contrarian move is not to push harder by default.`,
+        `It is to ask whether the friction is revealing something the old model cannot explain.`,
+        summary,
+      ],
+      Long: [
+        `That changes the way "${topic}" should be handled.`,
+        `Not every hesitation is a weakness. Sometimes it is a signal that the current approach is misaligned.`,
+        `The contrarian move is not to push harder by default.`,
+        `It is to ask whether the friction is revealing something the old model cannot explain.`,
+        `That question alone can expose a better path faster than another round of force.`,
+        summary,
+      ],
+    },
+    lengthMode
+  );
+
+  const cta = `What if the friction you keep fighting is actually trying to tell you something useful?`;
+
+  return finalizeDraft("Friction as Signal", "Contrarian", hook, body, cta);
+}
+
+function bodyByLength(
+  variants: {
+    Short: string[];
+    Standard: string[];
+    Long: string[];
+  },
+  lengthMode: string
+) {
+  if (lengthMode === "Short") return variants.Short.join("\n\n");
+  if (lengthMode === "Long") return variants.Long.join("\n\n");
+  return variants.Standard.join("\n\n");
 }
 
 function finalizeDraft(
