@@ -75,7 +75,7 @@ type SiteContext = {
   coreOffer: string;
 };
 
-type Suggestion = {
+type RealCandidate = {
   domain: string;
   page_title: string;
   page_url: string;
@@ -162,9 +162,7 @@ export default function BacklinksPage() {
     return links.filter((l) => l.backlink_project_id === selectedProject.id);
   }, [links, selectedProject]);
 
-  const siteContext = useMemo(() => {
-    return extractSiteContext(userSite);
-  }, [userSite]);
+  const siteContext = useMemo(() => extractSiteContext(userSite), [userSite]);
 
   useEffect(() => {
     setNotes(selectedProject?.notes || "");
@@ -395,7 +393,7 @@ export default function BacklinksPage() {
 
   async function addOpportunity() {
     const project = selectedProject || (await ensureProjectForSelectedPost());
-    if (!project) return;
+    if (!project || !selectedPost) return;
 
     if (!newOpportunity.domain.trim()) {
       setMessage("Target site / publication is required.");
@@ -425,11 +423,7 @@ export default function BacklinksPage() {
       const createdOpportunity = data as BacklinkOpportunity;
       setOpportunities((prev) => [createdOpportunity, ...prev]);
 
-      const draft = buildOutreachDraft(
-        selectedPost!,
-        siteContext,
-        createdOpportunity
-      );
+      const draft = buildOutreachDraft(selectedPost, siteContext, createdOpportunity);
 
       const outreachInsert = await supabase
         .from("backlink_outreach")
@@ -517,28 +511,38 @@ export default function BacklinksPage() {
       const project = selectedProject || (await ensureProjectForSelectedPost());
       if (!project) throw new Error("Could not create or load backlink project.");
 
-      const suggestions = buildSmartSuggestions(selectedPost, siteContext);
+      const existingDomains = selectedOpportunities.map((o) => o.domain);
 
-      if (!suggestions.length) {
-        setMessage("No AI suggestions generated.");
+      const res = await fetch("/api/backlinks/discover", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          post: {
+            id: selectedPost.id,
+            title: selectedPost.title,
+            excerpt: selectedPost.excerpt || "",
+          },
+          siteContext,
+          existingDomains,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.error || "Discovery failed.");
+      }
+
+      const candidates = (json?.candidates || []) as RealCandidate[];
+
+      if (!candidates.length) {
+        setMessage("No real discovery candidates were found.");
         return;
       }
 
-      const existingDomains = new Set(
-        selectedOpportunities.map((o) => o.domain.trim().toLowerCase())
-      );
-
-      const uniqueSuggestions = suggestions.filter(
-        (item) => !existingDomains.has(item.domain.trim().toLowerCase())
-      );
-
-      if (!uniqueSuggestions.length) {
-        setMessage("Suggestions already exist for this post.");
-        setActiveTab("outreach");
-        return;
-      }
-
-      const opportunityRows = uniqueSuggestions.map((item) => ({
+      const opportunityRows = candidates.map((item) => ({
         backlink_project_id: project.id,
         domain: item.domain,
         page_title: item.page_title,
@@ -579,87 +583,14 @@ export default function BacklinksPage() {
       setOutreachRows((prev) => [...createdOutreach, ...prev]);
 
       setMessage(
-        `Generated ${createdOpportunities.length} opportunities and ${createdOutreach.length} outreach drafts.`
+        `Generated ${createdOpportunities.length} real candidates and ${createdOutreach.length} outreach drafts.`
       );
       setActiveTab("outreach");
     } catch (err: any) {
-      setMessage(err?.message || "Failed to generate AI backlink opportunities.");
+      setMessage(err?.message || "Failed to generate real discovery candidates.");
     } finally {
       setBusy(false);
     }
-  }
-
-  function buildSmartSuggestions(post: BlogPost, site: SiteContext): Suggestion[] {
-    const text = `${post.title || ""} ${post.excerpt || ""}`.toLowerCase();
-    const suggestions: Suggestion[] = [];
-
-    const region = site.region || "regional";
-    const audience = site.audience || "professionals";
-    const niche = site.niche || "business";
-    const brand = site.brandName || "our site";
-
-    const hasLeadership =
-      text.includes("leadership") || text.includes("executive");
-    const hasMarketing = text.includes("marketing");
-    const hasAi = text.includes("ai");
-    const hasSingapore = text.includes("singapore");
-    const hasMalaysia = text.includes("malaysia");
-
-    suggestions.push({
-      domain: `${region} business publication`,
-      page_title: `${region} business insights`,
-      page_url: "",
-      relevance_reason: `This post is relevant to ${region}-focused readers interested in ${niche}.`,
-      outreach_angle: `Position the article as a practical resource for ${audience} in ${region}.`,
-    });
-
-    suggestions.push({
-      domain: `${niche} roundup / curated resource page`,
-      page_title: `${niche} resource roundup`,
-      page_url: "",
-      relevance_reason: `The post is educational and could fit a curated roundup or expert resource page.`,
-      outreach_angle: `Lead with clarity, usefulness, and direct value for readers looking for concise expert guidance.`,
-    });
-
-    if (hasLeadership) {
-      suggestions.push({
-        domain: `executive leadership resource hub`,
-        page_title: `leadership resources`,
-        page_url: "",
-        relevance_reason: `This post speaks directly to executives, leadership development, and decision-making themes.`,
-        outreach_angle: `Present it as a practical leadership reference rather than a generic opinion piece.`,
-      });
-    }
-
-    if (hasMarketing || hasAi) {
-      suggestions.push({
-        domain: `AI and digital strategy publication`,
-        page_title: `digital growth library`,
-        page_url: "",
-        relevance_reason: `The post overlaps with current AI, digital growth, and marketing strategy conversations.`,
-        outreach_angle: `Frame it as a grounded business-use article, not hype-driven AI commentary.`,
-      });
-    }
-
-    if (hasSingapore || hasMalaysia) {
-      suggestions.push({
-        domain: `Singapore / Malaysia professional publication`,
-        page_title: `regional professional insights`,
-        page_url: "",
-        relevance_reason: `The post has direct local relevance and may fit publications serving Singapore and Malaysia audiences.`,
-        outreach_angle: `Pitch the article as locally relevant, practical, and immediately useful for professionals in the region.`,
-      });
-    }
-
-    suggestions.push({
-      domain: `${brand} guest contribution target`,
-      page_title: `guest contribution / expert opinion`,
-      page_url: "",
-      relevance_reason: `This post can also be reframed as a guest contribution to extend reach and brand authority.`,
-      outreach_angle: `Offer a shortened adapted version or summary tailored to the publication’s readers.`,
-    });
-
-    return dedupeSuggestions(suggestions).slice(0, 5);
   }
 
   function buildOutreachDraft(
@@ -703,16 +634,6 @@ export default function BacklinksPage() {
     return { subject_line, message_body };
   }
 
-  function dedupeSuggestions(items: Suggestion[]) {
-    const seen = new Set<string>();
-    return items.filter((item) => {
-      const key = item.domain.trim().toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-
   function extractSiteContext(row: UserSiteRow | null): SiteContext {
     if (!row) return EMPTY_SITE_CONTEXT;
 
@@ -742,16 +663,12 @@ export default function BacklinksPage() {
     };
 
     const brandName =
-      pick(
-        "brand_name",
-        "site_name",
-        "business_name",
-        "company_name",
-        "name"
-      ) || EMPTY_SITE_CONTEXT.brandName;
+      pick("brand_name", "site_name", "business_name", "company_name", "name") ||
+      EMPTY_SITE_CONTEXT.brandName;
 
     const websiteUrl =
-      pick("website_url", "site_url", "url", "domain") || EMPTY_SITE_CONTEXT.websiteUrl;
+      pick("website_url", "site_url", "url", "domain") ||
+      EMPTY_SITE_CONTEXT.websiteUrl;
 
     const niche =
       pick("niche", "industry", "topic", "site_topic", "business_type") ||
@@ -765,8 +682,7 @@ export default function BacklinksPage() {
       pick("region", "location", "country", "market_region") ||
       EMPTY_SITE_CONTEXT.region;
 
-    const voice =
-      pick("voice", "tone", "brand_voice") || EMPTY_SITE_CONTEXT.voice;
+    const voice = pick("voice", "tone", "brand_voice") || EMPTY_SITE_CONTEXT.voice;
 
     const coreOffer =
       pick("core_offer", "offer", "positioning", "value_proposition") ||
@@ -1029,6 +945,17 @@ export default function BacklinksPage() {
                             <div style={{ fontSize: 14, marginBottom: 6 }}>
                               {opportunity.page_title || "No page title"}
                             </div>
+                            {opportunity.page_url ? (
+                              <div style={{ marginBottom: 6 }}>
+                                <a
+                                  href={opportunity.page_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open candidate page
+                                </a>
+                              </div>
+                            ) : null}
                             <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>
                               {opportunity.relevance_reason || "No relevance reason"}
                             </div>
