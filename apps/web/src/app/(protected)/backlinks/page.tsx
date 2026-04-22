@@ -1,3 +1,11 @@
+if (process.env.NEXT_PUBLIC_ENABLE_BACKLINKS !== "true") {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Feature not available</h1>
+      <p>This module is currently in private beta.</p>
+    </main>
+  );
+}
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
