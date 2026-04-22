@@ -147,6 +147,14 @@ function Card({
             </button>
 
             <Link
+              href={`/linkedin?postId=${encodeURIComponent(post.id)}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{ color: "#9ad", textDecoration: "underline" }}
+            >
+              Create LinkedIn Post
+            </Link>
+
+            <Link
               href={`/backlinks?postId=${encodeURIComponent(post.id)}`}
               onClick={(e) => e.stopPropagation()}
               style={{ color: "#9ad", textDecoration: "underline" }}
@@ -508,8 +516,8 @@ export default function LibraryPage() {
         const matchingPost = posts.find((p) => p.id === id);
         const safeTitle =
           (matchingPost?.title || "blog-post")
-            .replace(/[<>:\"/\\\\|?*\\x00-\\x1F]/g, "")
-            .replace(/\\s+/g, "-")
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+            .replace(/\s+/g, "-")
             .slice(0, 80) || "blog-post";
 
         const a = document.createElement("a");
@@ -590,6 +598,7 @@ export default function LibraryPage() {
           </button>
 
           <Link href="/generator">Generator</Link>
+          <Link href="/linkedin">LinkedIn</Link>
         </div>
       </div>
 
