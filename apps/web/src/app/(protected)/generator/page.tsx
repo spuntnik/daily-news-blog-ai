@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "../../../utils/supabase/browser";
 import type { AddonProfile, GeneratorMode } from "../../../lib/addon/types";
@@ -473,6 +474,15 @@ export default function GeneratorPage() {
           Export last saved .docx
         </button>
 
+        {lastSavedId ? (
+          <Link
+            href={`/linkedin?postId=${encodeURIComponent(lastSavedId)}`}
+            style={{ textDecoration: "underline" }}
+          >
+            Create LinkedIn Post
+          </Link>
+        ) : null}
+
         {status && <span style={{ opacity: 0.85 }}>{status}</span>}
       </div>
 
@@ -543,7 +553,27 @@ export default function GeneratorPage() {
 
           {activeTab === "blog" && (
             <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 10 }}>
-              <h2>{addonResult.blogTitle}</h2>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginBottom: 12,
+                }}
+              >
+                <h2 style={{ margin: 0 }}>{addonResult.blogTitle}</h2>
+                {lastSavedId ? (
+                  <Link
+                    href={`/linkedin?postId=${encodeURIComponent(lastSavedId)}`}
+                    style={{ textDecoration: "underline" }}
+                  >
+                    Create LinkedIn Post
+                  </Link>
+                ) : null}
+              </div>
+
               <div dangerouslySetInnerHTML={{ __html: addonResult.blogHtml }} />
               <p style={{ marginTop: 16 }}>
                 <strong>CTA:</strong> {addonResult.cta}
