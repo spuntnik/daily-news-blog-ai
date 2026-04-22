@@ -289,11 +289,11 @@ export default function LinkedInPage() {
   }
 
   return (
-    <main style={{ padding: 24 }}>
+    <main style={{ padding: 24, maxWidth: 1400 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
         LinkedIn Posts
       </h1>
-      <p style={{ marginBottom: 20, opacity: 0.7 }}>
+      <p style={{ marginBottom: 20, opacity: 0.75, maxWidth: 900 }}>
         Turn blog ideas and articles into LinkedIn-ready posts with more tension, recognition, and reflective pull.
       </p>
 
@@ -303,7 +303,8 @@ export default function LinkedInPage() {
             marginBottom: 16,
             padding: 12,
             border: "1px solid #ddd",
-            borderRadius: 8,
+            borderRadius: 10,
+            background: "#fafafa",
           }}
         >
           {message}
@@ -312,14 +313,21 @@ export default function LinkedInPage() {
 
       {loading ? <div>Loading...</div> : null}
 
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        <div style={{ width: 360 }}>
-          <div
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "360px minmax(0, 1fr)",
+          gap: 24,
+          alignItems: "start",
+        }}
+      >
+        <div style={{ display: "grid", gap: 16 }}>
+          <section
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 16,
-              marginBottom: 16,
+              background: "#fff",
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Source</div>
@@ -328,7 +336,7 @@ export default function LinkedInPage() {
               <button
                 onClick={() => setSourceMode("blog")}
                 style={{
-                  background: sourceMode === "blog" ? "#f2f2f2" : "white",
+                  background: sourceMode === "blog" ? "#f2f2f2" : "#fff",
                 }}
               >
                 Use Blog
@@ -336,7 +344,7 @@ export default function LinkedInPage() {
               <button
                 onClick={() => setSourceMode("keyword")}
                 style={{
-                  background: sourceMode === "keyword" ? "#f2f2f2" : "white",
+                  background: sourceMode === "keyword" ? "#f2f2f2" : "#fff",
                 }}
               >
                 Use Keyword
@@ -344,10 +352,11 @@ export default function LinkedInPage() {
             </div>
 
             {sourceMode === "blog" ? (
-              <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 12 }}>
                 <select
                   value={selectedPostId}
                   onChange={(e) => setSelectedPostId(e.target.value)}
+                  style={{ width: "100%" }}
                 >
                   <option value="">Select a blog post</option>
                   {posts.map((post) => (
@@ -360,23 +369,23 @@ export default function LinkedInPage() {
                 {selectedPost ? (
                   <div
                     style={{
-                      padding: 12,
+                      padding: 14,
                       border: "1px solid #ddd",
                       borderRadius: 10,
                       background: "#fafafa",
                     }}
                   >
-                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>
                       {selectedPost.title}
                     </div>
-                    <div style={{ fontSize: 14, opacity: 0.8 }}>
+                    <div style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.8 }}>
                       {selectedPost.excerpt || "No excerpt available."}
                     </div>
                   </div>
                 ) : null}
               </div>
             ) : (
-              <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 12 }}>
                 <input
                   placeholder="Enter keyword or topic"
                   value={manualKeyword}
@@ -396,14 +405,14 @@ export default function LinkedInPage() {
                 </div>
               </div>
             )}
-          </div>
+          </section>
 
-          <div
+          <section
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 16,
-              marginBottom: 16,
+              background: "#fff",
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Generation Settings</div>
@@ -426,17 +435,18 @@ export default function LinkedInPage() {
                 {busy ? "Generating..." : "Generate LinkedIn Angles"}
               </button>
             </div>
-          </div>
+          </section>
 
-          <div
+          <section
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 16,
+              background: "#fff",
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Site Context</div>
-            <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 14, lineHeight: 1.75 }}>
               <div><strong>Brand:</strong> {siteContext.brandName}</div>
               <div><strong>Website:</strong> {siteContext.websiteUrl || "-"}</div>
               <div><strong>Niche:</strong> {siteContext.niche}</div>
@@ -445,16 +455,16 @@ export default function LinkedInPage() {
               <div><strong>Voice:</strong> {siteContext.voice}</div>
               <div><strong>Core offer:</strong> {siteContext.coreOffer}</div>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div style={{ flex: 1 }}>
-          <div
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <section
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 16,
-              marginBottom: 16,
+              background: "#fff",
             }}
           >
             <div
@@ -462,7 +472,7 @@ export default function LinkedInPage() {
                 display: "flex",
                 justifyContent: "space-between",
                 gap: 12,
-                alignItems: "center",
+                alignItems: "flex-start",
                 flexWrap: "wrap",
               }}
             >
@@ -482,17 +492,19 @@ export default function LinkedInPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </section>
 
           {generatedDrafts.length ? (
             <div style={{ display: "grid", gap: 16 }}>
               {generatedDrafts.map((draft, index) => (
-                <div
+                <section
                   key={`${draft.angle_name}-${index}`}
                   style={{
                     border: "1px solid #ddd",
                     borderRadius: 12,
                     padding: 16,
+                    background: "#fff",
+                    minWidth: 0,
                   }}
                 >
                   <div
@@ -500,69 +512,104 @@ export default function LinkedInPage() {
                       display: "flex",
                       justifyContent: "space-between",
                       gap: 12,
-                      alignItems: "center",
+                      alignItems: "flex-start",
                       flexWrap: "wrap",
-                      marginBottom: 12,
+                      marginBottom: 14,
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700 }}>{draft.angle_name}</div>
+                      <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 4 }}>
+                        {draft.angle_name}
+                      </div>
                       <div style={{ fontSize: 13, opacity: 0.75 }}>{draft.tone}</div>
                     </div>
 
                     <button onClick={() => copyDraft(draft.full_post)}>Copy</button>
                   </div>
 
-                  <div style={{ marginBottom: 10 }}>
-                    <strong>Hook</strong>
-                    <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{draft.hook}</div>
-                  </div>
+                  <div style={{ display: "grid", gap: 16 }}>
+                    <div>
+                      <strong>Hook</strong>
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 8,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {draft.hook}
+                      </div>
+                    </div>
 
-                  <div style={{ marginBottom: 10 }}>
-                    <strong>Body</strong>
-                    <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{draft.body}</div>
-                  </div>
+                    <div>
+                      <strong>Body</strong>
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 8,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {draft.body}
+                      </div>
+                    </div>
 
-                  <div style={{ marginBottom: 10 }}>
-                    <strong>CTA</strong>
-                    <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{draft.cta}</div>
-                  </div>
+                    <div>
+                      <strong>CTA</strong>
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 8,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {draft.cta}
+                      </div>
+                    </div>
 
-                  <div
-                    style={{
-                      marginTop: 12,
-                      padding: 12,
-                      border: "1px solid #eee",
-                      borderRadius: 10,
-                      background: "#fafafa",
-                    }}
-                  >
-                    <strong>Full Post</strong>
-                    <div style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>
-                      {draft.full_post}
+                    <div
+                      style={{
+                        marginTop: 4,
+                        padding: 14,
+                        border: "1px solid #eee",
+                        borderRadius: 10,
+                        background: "#fafafa",
+                      }}
+                    >
+                      <strong>Full Post</strong>
+                      <div
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          marginTop: 8,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {draft.full_post}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           ) : (
-            <div
+            <section
               style={{
                 border: "1px solid #ddd",
                 borderRadius: 12,
                 padding: 16,
+                background: "#fff",
               }}
             >
               Generate drafts to preview them here.
-            </div>
+            </section>
           )}
 
-          <div
+          <section
             style={{
               border: "1px solid #ddd",
               borderRadius: 12,
               padding: 16,
-              marginTop: 16,
+              background: "#fff",
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 12 }}>Saved Drafts</div>
@@ -576,6 +623,7 @@ export default function LinkedInPage() {
                       border: "1px solid #eee",
                       borderRadius: 10,
                       padding: 12,
+                      background: "#fafafa",
                     }}
                   >
                     <div style={{ fontWeight: 700 }}>
@@ -584,14 +632,16 @@ export default function LinkedInPage() {
                     <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 8 }}>
                       {draft.tone || "-"} • {new Date(draft.created_at).toLocaleString()}
                     </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>{draft.full_post}</div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                      {draft.full_post}
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div>No saved LinkedIn drafts yet.</div>
             )}
-          </div>
+          </section>
         </div>
       </div>
     </main>
@@ -615,19 +665,16 @@ function buildLinkedInDrafts({
     summary?.trim() ||
     `This topic matters because it touches the tension many ${site.audience.toLowerCase()} feel but rarely say out loud.`;
 
-  const drafts: GeneratedDraft[] = [
-    buildIdentityShiftDraft(topic, conciseSummary, site, toneMode, lengthMode),
-    buildValidationDraft(topic, conciseSummary, site, toneMode, lengthMode),
-    buildContrarianDraft(topic, conciseSummary, site, toneMode, lengthMode),
+  return [
+    buildIdentityShiftDraft(topic, conciseSummary, toneMode, lengthMode),
+    buildValidationDraft(topic, conciseSummary, toneMode, lengthMode),
+    buildContrarianDraft(topic, conciseSummary, toneMode, lengthMode),
   ];
-
-  return drafts;
 }
 
 function buildIdentityShiftDraft(
   topic: string,
   summary: string,
-  site: SiteContext,
   toneMode: string,
   lengthMode: string
 ): GeneratedDraft {
@@ -655,7 +702,6 @@ function buildIdentityShiftDraft(
 function buildValidationDraft(
   topic: string,
   summary: string,
-  site: SiteContext,
   toneMode: string,
   lengthMode: string
 ): GeneratedDraft {
@@ -684,7 +730,6 @@ function buildValidationDraft(
 function buildContrarianDraft(
   topic: string,
   summary: string,
-  site: SiteContext,
   toneMode: string,
   lengthMode: string
 ): GeneratedDraft {
@@ -712,17 +757,9 @@ function buildContrarianDraft(
 function buildBody(lines: string[], lengthMode: string) {
   let selected = lines;
 
-  if (lengthMode === "Short") {
-    selected = lines.slice(0, 3);
-  }
-
-  if (lengthMode === "Standard") {
-    selected = lines.slice(0, 5);
-  }
-
-  if (lengthMode === "Long") {
-    selected = lines;
-  }
+  if (lengthMode === "Short") selected = lines.slice(0, 3);
+  if (lengthMode === "Standard") selected = lines.slice(0, 5);
+  if (lengthMode === "Long") selected = lines;
 
   return selected.join("\n\n");
 }
