@@ -16,7 +16,7 @@ export default function AuthorityPage() {
     });
 
     const data = await res.json();
-    setResult(data);
+setResult(JSON.parse(data.output));
     setLoading(false);
   };
 
